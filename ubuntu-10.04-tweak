@@ -1,0 +1,1462 @@
+#!/bin/bash
+
+#######################################################################
+#
+#     Dieses Script soll die ersten Schritte mit Ubuntu 10.04 Lucid Lynx 32bit and 64bit erleichtern,
+#	so dass man sein System an seine Wuensche anpassen kann und ggf. optimieren kann.
+#
+#     The script comes with no warranty. The author is not responsible if
+#     your system breaks.
+#
+#
+#    This program is free software: you can redistribute it and/or modify
+#    it under the terms of the GNU General Public License as published by
+#    the Free Software Foundation, either version 3 of the License, or
+#    (at your option) any later version.
+#
+#    This program is distributed in the hope that it will be useful,
+#    but WITHOUT ANY WARRANTY; without even the implied warranty of
+#    MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+#    GNU General Public License for more details.
+#
+#    You should have received a copy of the GNU General Public License
+#    along with this program. If not, see <http://www.gnu.org/licenses/>.
+#
+#    Title     	:    ubuntu-10.04-tweak
+#    Author    	:    Lars Moelleken (suckup.de)
+#    Date       	:    2010-04-28
+#    Requires 	:    dialog, mktemp (sudo aptitude install dialog mktemp)
+#
+#    based on the script of: Copyright (C) 2010 Alin Andrei, http://www.webupd8.org - ubuntu-10.04-script
+#
+#######################################################################
+
+#dialog --menu "Wähle einen Texteditor" 15 60 10\
+#	Emacs "Ein sehr mächtiger Texteditor"\
+#	vi "Ein sehr mächtiger Texteditor für das Terminal"\
+#	Gedit "Standard-Editor von Gnome"\
+#	Kile "Standard-Editor von KDE" 2>$TMPFILE
+#read Eingabe <$TMPFILE
+#dialog --msgbox "Sie haben $Eingabe gewählt" 0 0
+
+#dialog --backtitle "Interagierendes Dialogprogram" --yesno "Geht es dir gut?" 0 0
+#if [ $? -eq 0 ]; then
+#	dialog --msgbox "Das freut mich!" 0 0
+#else
+#	dialog --msgbox "Das tut mir aber leid!" 0 0
+#fi
+
+# einige Variablen werden festgelegt, kann man bestimmt brauchen ;-)
+export VERSION="0.1"
+export OLDCONF=$(dpkg -l|grep "^rc"|awk '{print $2}')
+export CURKERNEL=$(uname -r|sed 's/-*[a-z]//g'|sed 's/-386//g')
+export LINUXPKG="linux-(image|headers|ubuntu-modules|restricted-modules)"
+export METALINUXPKG="linux-(image|headers|restricted-modules)-(generic|i386|server|common|rt|xen)"
+export OLDKERNELS=$(dpkg -l|awk '{print $2}'|grep -E $LINUXPKG |grep -vE $METALINUXPKG|grep -v $CURKERNEL)
+export TRUETYPEPATH="/usr/share/fonts/truetype/"
+export SOURCES="/etc/apt/sources.list"
+export SOURCESD="/etc/apt/sources.list.d"
+export BACKUP="/etc/apt/backup"
+export BACKUP_OLD="/etc/apt/backup_old"
+export PATH="/usr/bin:/usr/sbin:/bin:/sbin"
+export USER=`whoami`
+export TMPFILE=$(mktemp -t)
+export YELLOW="\033[1;33m"
+export RED="\033[0;31m"
+export ENDCOLOR="\033[0m"
+
+# check: ob dialog / mktemp bereits installiert ist
+ls -al /usr/bin/dialog &>/dev/null 2>&1
+if ! kommando ; then
+# wenn nicht, wird dies installiert
+	sudo aptitude install dialog
+fi
+ls -al /usr/bin/dialog &>/dev/null 2>&1
+if ! kommando ; then
+# wenn nicht, wird dies installiert
+	sudo aptitude install mktemp
+fi
+
+function chooseDialog {
+DIALOGAPP=`which dialog 2> /dev/null` \
+|| DIALOGAPP=`which whiptail 2> /dev/null`
+}
+
+function setDialogDimensions {
+test -x /usr/bin/tty && CONSOLE=`/usr/bin/tty`
+test -z "$CONSOLE" && CONSOLE=/dev/console
+# Get the console size (rows columns)
+SIZE=$(stty size < $CONSOLE)
+# Strip off the rows leaving the columns
+SCREEN_W=${SIZE#*\ }
+# And get the rows too
+SCREEN_H=${SIZE%%\ *}
+if [ "$SCREEN_W" -gt 0 ]; then
+	let "MAX_W = $SCREEN_W - 2"
+fi
+if [ "$SCREEN_H" -gt 0 ]; then
+	let "MAX_H = $SCREEN_H - 2"
+fi
+TEXT_W=`echo "$1" | wc -L`
+TEXT_H=`echo "$1" | wc -l`
+# DOUBLE WIDTH TO GET APPROX SQUARE IF width < 2 x Height
+let "DIALOG_H = $TEXT_H + 8"
+let "THRESH = 2 * $DIALOG_H"
+let "DIALOG_W = $TEXT_W + 8"
+if [ $DIALOG_W -lt $THRESH ]; then
+	let "DIALOG_W = 2 * $DIALOG_W"
+fi
+# SET MIN SIZE OR CAN'T SEE ANYTHING - something like:
+if [ "$DIALOG_W" -lt 20 ]; then
+	let "DIALOG_W = 20"
+fi
+if [ "$DIALOG_H" -lt 10 ]; then
+	let "DIALOG_H = 10"
+fi
+# If dimensions required by text are more than current screen can show
+# then set dialog dimension(s) to max.
+if [ "$DIALOG_W" -gt "$MAX_W" ]; then
+	let "DIALOG_W = $MAX_W"
+fi
+if [ "$DIALOG_H" -gt "$MAX_H" ]; then
+	let "DIALOG_H = $MAX_H"
+fi
+}
+
+function msgboxDialog {
+chooseDialog
+IN="${1}"
+setDialogDimensions "${IN}"
+echo "dims $DIALOG_W $DIALOG_H"
+$DIALOGAPP --backtitle "DIALOGBACKTITLE" --title "DIALOGTITLE" --msgbox "${IN}"  $DIALOG_H $DIALOG_W
+}
+
+#FEHLER
+
+# check: ob Ubuntu Lucid installiert ist
+if [ "lucid" = `lsb_release -cs` ]; then
+# check: ob Ubuntu in 32 oder 64-Bit installiert ist
+	if [ "i686" = `uname -m` ]; then
+		dialog --title " Ubuntu 10.04 " --infobox "\nUbuntu 10.04 Lucid Lynx - OK" 10 50
+		ARCH=i386
+	elif [ "x86_64" = `uname -m` ]; then
+		dialog --title " Ubuntu 10.04 " --infobox "\nDu nutzt Ubuntu 10.04 Lucid Lynx - Alles OK" 10 50
+		ARCH=amd64
+# ansonsten wird das Skript beenedet (!= 32 bzw. 64-Bit System)
+	else
+		dialog --title " ERROR: Du nutzt nicht Ubuntu 10.04 " --infobox "\nDu nutzt nicht Ubuntu 10.04 Lucid Lynx 32 oder 64-Bit" 10 50
+       		exit
+	fi
+# ansonsten wird das Skript beendet (!= lucid)
+else
+	dialog --title " ERROR: Du nutzt nicht Ubuntu 10.04 " --infobox "\nDu nutzt nicht Ubuntu 10.04 Lucid Lynx 32 oder 64-Bit" 10 50
+	MESSAGE=" Ubuntu Update 10.04 Lucid auf `hostname` installieren? "
+# wenn gewuenscht, wird das Update auf Version 10.04 installiert
+        dialog --title " Ubuntu 10.04 Lucid " --yesno "\n`echo -e "$MESSAGE"`" 10 50
+        RESULT1=$?
+        if [ $RESULT1 = "0" ]; then
+		apt-get update && aptitude upgrade
+		aptitude install update-manager-core
+		sudo sed -i "s/Prompt.*/Prompt=normal/g" /etc/update-manager/release-upgrades
+		do-release-upgrade
+		exit
+	fi
+fi
+
+# check: ob du die passenden Rechte hast (!= root)
+if [ $USER != "root" ]; then
+	dialog --title " ERROR: Du bist nicht root " --infobox "\nDu bist nicht root, du bist '$USER'!\n\n (versuche es mal mit \"sudo bash $0\")" 10 50
+        exit
+fi
+
+# check: ob Updates anstehen
+SUBJECT="[`hostname`] - Update Hinweis"
+COUNT=`apt-get -s upgrade | grep -c "Inst"`    
+MESSAGE="SYSTEMMELDUNG:\nAuf `hostname` sind $COUNT neue Updates vorhanden!"
+# wenn mehr als ein Update ansteht, dann wird eine Meldung uber dessen Anzahl angezeigt 
+if [ $COUNT -gt 0 ]; then
+   	dialog --title " $SUBJECT " --msgbox "\n`echo -e "$MESSAGE"`" 10 50
+fi
+
+# ein Backup der aktuellen sources.list wird erstellt
+#
+# wenn das Verzeichnis bereits angelegt ist
+if [ -d $BACKUP ] ; then
+# fuer alle Dateien, im Backup-Verzeichnis
+	for I in `ls $BACKUP` ; do
+# wenn diese nicht bereits auf .bz2 enden
+		if [ $I != *.bz2 ]; then 
+# werden die Dateien komprimiert
+			bzip2 -z -f -q $BACKUP/$I
+		fi
+	done
+else
+# ansonsten wird erst-einmal das Backup-Verzeichnis angelegt
+	mkdir $BACKUP
+	MESSAGE="Backup-Verzeichnis wurde angelegt - $BACKUP"    
+	dialog --title " Backup-Verzeichnis " --msgbox "\n`echo -e "$MESSAGE"`" 10 50
+fi
+# wenn das Verzeichnis bereits angelegt ist
+if [ -d $BACKUP_OLD ]; then
+# nach 7 Tagen werden die Dateien nach /etc/apt/backup_old verschoben
+# nach 30 Tagen werden die Backups gelöscht
+	find $BACKUP -iregex '.*\.\(bz2\)' -mtime +7 -exec mv {} $BACKUP_OLD \;
+	find $BACKUP_OLD -iregex '.*\.\(bz2\)' -mtime +30 -exec rm {} \;
+else
+# ansonsten wird erst-einmal das Backup_old-Verzeichnis angelegt
+	mkdir $BACKUP_OLD
+	MESSAGE="Backup_old-Verzeichnis wurde angelegt - $BACKUP_OLD"    
+	dialog --title " Backup-Verzeichnis " --msgbox "\n`echo -e "$MESSAGE"`" 10 50
+fi
+# und die sources.list mit dem aktuellen Datum gespeichert
+BAK=sources.old.$(date "+%y%m%d-%H%M")
+cp -p $SOURCES $BACKUP/$BAK
+MESSAGE="Backup deiner sources.list wurde angelegt - $BACKUP/$BAK"    
+dialog --title " Backup-Verzeichnis " --msgbox "\n`echo -e "$MESSAGE"`" 10 50
+
+# ggf. die sources von sources.list.d migrieren
+#
+# wenn das Verzeichnis bereits angelegt ist und eine passende Datei vorhanden ist
+if [ -d $SOURCESD ] && [ -f $SOURCESD/*.list ] ; then
+	MESSAGE="Moechtest du die Repositories welche in einem Unterverzeichnis liegen, in deine sources.list migrieren?"    
+	dialog --title " $SOURCESD migrieren? " --yesno "\n`echo -e "$MESSAGE"`" 10 50 
+	RESULT1=$?
+	if [ $RESULT1 = "0" ]; then
+# Kommentare und Leerzeilen werden entfernt 
+		for I in `ls $SOURCESD/*.list`; do sed -e "s/#.*//g" -e "s/ *$//" -e "/^$/d" $I | sort -u > $TMPFILE; done
+		for I in `ls $SOURCES`; do sed -e "s/#.*//g" -e "s/ *$//" -e "/^$/d" $I | sort -u >> $TMPFILE; done
+		N=1
+# Ergebnis wird in ein Array geschrieben
+		while read RESULT; do
+			ARRAY[$N]=$RESULT
+			N=`expr $N + 1`
+		done < $TMPFILE
+		rm $TMPFILE
+# Array wird Zeilenweise wieder in eine Datei geschrieben
+		for I in `seq 0 ${#ARRAY[@]}`; do
+			echo "${ARRAY[$I]}" >> ${TMPFILE}
+		done
+		dialog --title " Repositories migrieren " --yesno "Möchtest du die Dateien wirklich migrieren?" 10 75
+		RESULT1=$?
+		if [ $RESULT1 = "0" ]; then
+# Ergebnis wird nun in die sources.list geschrieben und es wird aufgeraeumt
+			sed -e "s/#.*//g" -e "s/ *$//" -e "/^$/d" ${TMPFILE} | sort -u  > $SOURCES
+			rm $SOURCESD/*.list
+		fi
+	fi
+fi
+
+# check: ob ein Paket-Manager bereits laeuft
+sleep 1
+for LOCK in synaptic update-manager software-center apt-get dpkg aptitude ; do
+# wenn ein Update-Manager bereits laeft, dann wird das Skript beendet
+	if ps -U root -u root u | grep $LOCK | grep -v grep > /dev/null; then
+		MESSAGE="SYSTEMMELDUNG:\nDas Skript wird nicht laufen, wenn du $LOCK nicht vorher beendest!"    
+   		dialog --title " ERROR: $LOCK laeuft bereits " --msgbox "\n`echo -e "$MESSAGE"`" 10 50
+        	exit
+	fi
+done
+
+# gconf-tool mit den passenden User-Rechten starten
+ON_USER=$(echo ~ | awk -F'/' '{ print $1 $2 $3 }' | sed 's/home//g')
+export $(grep -v "^#" ~/.dbus/session-bus/`cat /var/lib/dbus/machine-id`-0)
+if sudo -u $ON_USER test -z "$DBUS_SESSION_BUS_ADDRESS" ; then
+       eval `sudo -u $ON_USER dbus-launch --sh-syntax --exit-with-session`
+fi
+
+#check-funktion: ob eine Internet-Verbindung besteht
+function testConnection() {
+# Verbindung nach www.google.de wird 3-mal versucht aufzubauen 
+TESTCONNECTION=`wget --tries=3 --timeout=10 www.google.de -O $TMPFILE &>/dev/null 2>&1`
+# wenn keine Verbindung hergestellt werden konnte, dann wird eine entsprechende Meldung angezeigt
+if [ $? != 0 ]; then
+	dialog --title " INFO: Internet-Verbindung - Problem " --msgbox "\nEs besteht momentan keine Internet-Verbindung, es koennen einige Funktionen des Skriptes daher nicht genutzt werden." 10 50
+	export INTERNET="nein"
+else
+# ansonsten ist alles OK
+	dialog --title " INFO: Internet-Verbindung - OK " --infobox "\nEs besteht eine Internet-Verbindung." 10 50
+	export INTERNET="ja"
+fi
+}
+
+# extra Repository einfuegen
+function launchpad_add() {
+# check-funktion wird aufgerufen
+testConnection
+# neue Funktion zum einfuegen der Repository
+function launchpad() {
+grep -iv $1 $SOURCES > $TMPFILE
+cp -p $TMPFILE $SOURCES
+A="## $2 ($1)"
+B="deb http://ppa.launchpad.net/$1/ubuntu lucid main" 
+C="deb-src http://ppa.launchpad.net/$1/ubuntu lucid main" 
+echo -e "$A" "\n$B" "\n$C" >> $SOURCES
+}
+dialog --backtitle "Extra-Repositories" \
+	--checklist "Extra-Repositories: fuer Ubuntu 10.04" 80 80 15 \
+	01 "Medibuntu" off\
+	02 "Ailurus - Ubuntu Tweak Tool + Erklaerung" off\
+	03 "Avant - Window Navigator" off\
+	04 "Nautilus Elementary - erweiterter Dateimanager" off\
+	05 "Gloobus - Datei (Bild, Text, Audio...) Vorschau" off\
+	06 "Compiz - 3D Desktop" off\
+	07 "Chromium - Google Chrome fuer Ubuntu" off\
+	08 "GlobalMenu - Globals Menue fuer das Gnome-Panel" off\
+	09 "OpenOffice - Office (Tabellen- Textverarbeitung...)" off\
+	10 "Gnome DO - Globaler Programm-Starter" off\
+	11 "Ubuntu Tweak - Ubuntu Tweak Tool" off\
+	12 "Wine - Windows Programme in Linux starten" off\
+	13 "X-Server - Desktop Updates" off\
+	14 "Flash - non-free Adobe Flash" off\
+	15 "Bisigi - Ubuntu Themes" off\
+	16 "GetDep - viele neue Programm Updates" off\
+	17 "VirtualBox - Virtuelle PCs installieren" off\
+	18 "Swiftfox - optimierte Firefox-Version" off\
+	19 "VLC Media Player" off\
+	20 "Pidgin" off\
+	21 "gpm - Mauszeigers in der Systemkonsole" off\
+	22 "Claws Mail - schneller Mail-Client" off\
+	23 "Google-Gadgets" off 2>$TMPFILE
+if [ ${?} -ne 0 ]; then return; fi
+read RESULT <$TMPFILE
+ARRAY=($RESULT)
+dialog --title " Extra-Repositories " --yesno "Moechtest du die Extra-Repositories wirklich eintragen?" 6 44 
+RESULT1=$?
+if [ $RESULT1 = "1" ]; then return; fi
+for I in ${ARRAY[@]}; do
+	case $I in
+		\"01\")
+			grep -iv medibuntu $SOURCES > $TMPFILE
+			cp -p $TMPFILE $SOURCES
+			wget http://packages.medibuntu.org/medibuntu-key.gpg && sudo apt-key add medibuntu-key.gpg && rm medibuntu-key.gpg
+			A="## Medibuntu" 
+			B="# Please report any bug on https://bugs.launchpad.net/medibuntu/" 
+			C="# wget http://packages.medibuntu.org/medibuntu-key.gpg && sudo apt-key add medibuntu-key.gpg && rm medibuntu-key.gpg" 
+			D="deb http://packages.medibuntu.org/ lucid free non-free" 
+			E="deb-src http://packages.medibuntu.org/ lucid free non-free" 
+			echo -e "$A" "\n$B" "\n$C" "\n$D" "\n$E" >> $SOURCES
+			sudo apt-get update && sudo aptitude install libdvdcss2 ubuntu-restricted-extras
+			if [ $ARCH = "i386" ]; then
+				sudo aptitude install w32codecs
+			elif [ $ARCH = "amd64" ]; then
+				sudo aptitude install w64codecs
+			fi
+		;;
+		\"02\")
+			grep -iv ailurus $SOURCES > $TMPFILE
+			cp -p $TMPFILE $SOURCES
+			launchpad "ailurus/ppa" "Ailurus"
+			sudo apt-key adv --recv-keys --keyserver keyserver.ubuntu.com 9A6FE242
+			sudo apt-get update && sudo aptitude install ailurus
+		;;
+		\"03\")
+			grep -iv awn-testing $SOURCES > $TMPFILE
+			cp -p $TMPFILE $SOURCES
+			launchpad "awn-testing/ppa" "AWN-Testing"
+			sudo apt-key adv --recv-keys --keyserver keyserver.ubuntu.com BF810CD5
+			sudo apt-get update && sudo aptitude install avant-window-navigator awn-applets-c-extras awn-applets-python-extras python-awn-extras	
+		;;
+		\"04\")
+			grep -iv nautilus-elementary $SOURCES > $TMPFILE
+			cp -p $TMPFILE $SOURCES
+			launchpad "am-monkeyd/nautilus-elementary-ppa" "Nautilus-Elementary"
+			grep -iv elementaryart $SOURCES > $TMPFILE
+			cp -p $TMPFILE $SOURCES
+			launchpad "elementaryart/elementarydesktop" "ElementaryArt"
+			sudo apt-key adv --recv-keys --keyserver keyserver.ubuntu.com 2E206FF0
+			sudo apt-key adv --recv-keys --keyserver keyserver.ubuntu.com FC5D50C5
+			sudo apt-get update && sudo aptitude upgrade nautilus
+		;;
+		\"05\")
+			grep -iv gloobus $SOURCES > $TMPFILE
+			cp -p $TMPFILE $SOURCES
+			launchpad "gloobus-dev/gloobus-preview" "Gloobus"
+			sudo apt-key adv --recv-keys --keyserver keyserver.ubuntu.com EB13C954
+			sudo apt-get update && sudo aptitude install gloobus-preview
+		;;
+		\"06\")
+			grep -iv compiz $SOURCES > $TMPFILE
+			cp -p $TMPFILE $SOURCES
+			launchpad "compiz/ppa" "Compiz"
+			sudo apt-key adv --recv-keys --keyserver keyserver.ubuntu.com 42C24D89
+			sudo apt-get update && sudo aptitude upgrade compiz 
+			sudo aptitude install compizconfig-settings-manager
+		;;
+		\"07\")
+			grep -iv chromium $SOURCES > $TMPFILE
+			cp -p $TMPFILE $SOURCES
+			launchpad "chromium-daily/ppa" "Chromium"
+			sudo apt-key adv --recv-keys --keyserver keyserver.ubuntu.com 4E5E17B5
+			sudo apt-get update && sudo aptitude install chromium-browser chromium-codecs-ffmpeg 
+		;;
+		\"08\")
+			grep -iv globalmenu $SOURCES > $TMPFILE
+			cp -p $TMPFILE $SOURCES
+			launchpad "globalmenu-team/ppa" "GlobalMenu"
+			sudo apt-key adv --recv-keys --keyserver keyserver.ubuntu.com DA6DEEAA
+			sudo apt-get update && sudo aptitude install gnome-globalmenu
+		;;
+		\"09\")
+			grep -iv openoffice $SOURCES > $TMPFILE
+			cp -p $TMPFILE $SOURCES
+			launchpad "openoffice-pkgs" "OpenOffice"
+			sudo apt-key adv --recv-keys --keyserver keyserver.ubuntu.com 247D1CFF
+			sudo apt-get update && sudo aptitude upgrade openoffice.org
+		;;
+		\"10\")
+			grep -iv do-core $SOURCES > $TMPFILE
+			cp -p $TMPFILE $SOURCES
+			launchpad "do-core/ppa" "do-core - Gnome-Do"
+			sudo apt-key adv --recv-keys --keyserver keyserver.ubuntu.com 77558DD0
+			sudo apt-get update && sudo aptitude upgrade openoffice.org
+			sudo apt-get update && sudo aptitude install gnome-do
+		;;
+		\"11\")
+			grep -iv tualatrix $SOURCES > $TMPFILE
+			cp -p $TMPFILE $SOURCES
+			launchpad "tualatrix" "tualatrix - Ubuntu Tweak"
+			grep -iv ubuntu-tweak $SOURCES > $TMPFILE
+			cp -p $TMPFILE $SOURCES
+			launchpad "ubuntu-tweak-testing/ppa" "Ubuntu-Tweak"
+			sudo apt-key adv --keyserver keyserver.ubuntu.com --recv-keys 0624A220
+			sudo apt-key adv --keyserver keyserver.ubuntu.com --recv-keys E260F5B0 
+			sudo apt-get update && sudo aptitude install ubuntu-tweak
+		;;
+		\"12\")
+			grep -iv ubuntu-wine $SOURCES > $TMPFILE
+			cp -p $TMPFILE $SOURCES
+			launchpad "ubuntu-wine/ppa" "Ubuntu-Wine"
+			sudo apt-key adv --keyserver keyserver.ubuntu.com --recv-keys F9CB8DB0
+			sudo apt-get update && sudo aptitude install wine1.2
+		;;
+		\"13\")
+			grep -iv x-updates $SOURCES > $TMPFILE
+			cp -p $TMPFILE $SOURCES
+			launchpad "ubuntu-x-swat/x-updates" "Ubuntu X-Updates"
+			sudo apt-key adv --keyserver keyserver.ubuntu.com --recv-keys AF1CDFA9
+			sudo apt-get update && sudo aptitude upgrade
+		;;
+		\"14\")
+			grep -iv debfx $SOURCES > $TMPFILE
+			cp -p $TMPFILE $SOURCES
+			launchpad "debfx/ppa" "debfx - Flash"
+			sudo apt-key adv --keyserver keyserver.ubuntu.com --recv-keys 62F1201A
+			pkill -9 firefox*
+			if [ $ARCH = "i386" ]; then
+				sudo apt-get remove -y --purge flashplugin-nonfree gnash gnash-common mozilla-plugin-gnash swfdec-mozilla libflashsupport nspluginwrapper flashplugin-installer
+				sudo rm -f /usr/lib/mozilla/plugins/*flash*
+				sudo rm -f ~/.mozilla/plugins/*flash*
+				sudo rm -f /usr/lib/firefox/plugins/*flash*
+				sudo rm -f /usr/lib/firefox-addons/plugins/*flash*
+				sudo rm -rfd /usr/lib/nspluginwrapper
+				sudo apt-get update && sudo aptitude install flashplugin-nonfree
+			elif [ $ARCH = "amd64" ]; then
+				sudo apt-get remove -y --purge flashplugin-nonfree gnash gnash-common mozilla-plugin-gnash swfdec-mozilla libflashsupport nspluginwrapper flashplugin-installer
+				sudo rm -f /usr/lib/mozilla/plugins/*flash*
+				sudo rm -f ~/.mozilla/plugins/*flash*
+				sudo rm -f /usr/lib/firefox/plugins/*flash*
+				sudo rm -f /usr/lib/firefox-addons/plugins/*flash*
+				sudo rm -rfd /usr/lib/nspluginwrapper
+				sudo apt-get install ia32-libs nspluginwrapper
+				sudo getlibs -p libcurl3
+				sudo getlibs -p libnss3-1d
+				sudo getlibs -p libnspr4-0d
+				wget http://fpdownload.macromedia.com/get/flashplayer/current/install_flash_player_10_linux.tar.gz
+				tar zxvf install_flash_player_10_linux.tar.gz
+				rm install_flash_player_10_linux.tar.gz
+				sudo cp install_flash_player_10_linux/libflashplayer.so /usr/lib/mozilla/plugins/
+				rm -rf ~/install_flash_player_10_linux/
+				sudo nspluginwrapper -i /usr/lib/mozilla/plugins/libflashplayer.so
+				sudo ln -sf /usr/lib/nspluginwrapper/plugins/npwrapper.libflashplayer.so /usr/lib/mozilla/plugins/
+				sudo ln -sf /usr/lib/nspluginwrapper/plugins/npwrapper.libflashplayer.so /usr/lib/firefox-addons/plugins/
+			fi
+		;;
+		\"15\")
+			grep -iv bisigi $SOURCES > $TMPFILE
+			cp -p $TMPFILE $SOURCES
+			launchpad "bisigi/ppa" "Bisigi - Ubuntu Themes"
+			sudo apt-key adv --keyserver keyserver.ubuntu.com --recv-keys 881574DE
+			sudo apt-get update && sudo aptitude install bisigi-themes community-themes
+		;;
+		\"16\")
+			grep -iv getdeb $SOURCES > $TMPFILE
+			cp -p $TMPFILE $SOURCES
+			A="## GetDeb" 
+			B="deb http://archive.getdeb.net/ubuntu lucid-getdeb apps"
+			C="deb http://archive.getdeb.net/ubuntu lucid-getdeb games"
+			D="deb-src http://archive.getdeb.net/ubuntu lucid-getdeb apps"
+			E="deb-src http://archive.getdeb.net/ubuntu lucid-getdeb games"
+			echo -e "$A" "\n$B" "\n$C" "\n$D" "\n$E" >> $SOURCES
+			wget -q -O- http://archive.getdeb.net/getdeb-archive.key | sudo apt-key add -
+			sudo apt-get update && sudo aptitude upgrade
+		;;   
+		\"17\")
+			grep -iv download.virtualbox $SOURCES > $TMPFILE
+			cp -p $TMPFILE $SOURCES
+			A="## VirtualBox (download.virtualbox)" 
+			B="deb http://download.virtualbox.org/virtualbox/debian lucid non-free" 
+			echo -e "$A" "\n$B" >> $SOURCES
+			wget -q http://download.virtualbox.org/virtualbox/debian/sun_vbox.asc -O- | sudo apt-key add -
+		;;
+		\"18\")
+			grep -iv getswiftfox $SOURCES > $TMPFILE
+			cp -p $TMPFILE $SOURCES
+			A="## Swiftfox (getswiftfox)" 
+			B="deb http://getswiftfox.com/builds/debian unstable non-free" 
+			echo -e "$A" "\n$B" >> $SOURCES
+			sudo apt-get update
+			dialog --backtitle "Swiftfox-Version" \
+				--radiolist "Ubuntu Version waehlen" 30 60 8 \
+				01 "Swiftfox-Athlon64 (AMD64 Hardware mit 64bit OS)" off\
+				02 "Swiftfox-Athlon64-32bit (AMD64 Hardware mit 32bit OS)" off\
+				03 "Swiftfox-Prescott (Intel Prescott oder neuer)" off\
+				04 "Swiftfox-i686 (aeltere AMD und Intel)" on 2>$TMPFILE
+			if [ ${?} -ne 0 ]; then return; fi
+			read RESULT <$TMPFILE
+			case $RESULT in
+    				01)
+					SWIFTFOX_VERSION="swiftfox-athlon64"	
+    				;;
+    				02)
+      					SWIFTFOX_VERSION="swiftfox-athlon64-32bit"
+   				;;
+  				03)
+					SWIFTFOX_VERSION="swiftfox-prescott"
+				;;
+				04)
+					SWIFTFOX_VERSION="swiftfox-i686"
+				;;
+				*)
+					SWIFTFOX_VERSION="FEHLER"
+				;;
+			esac
+			if [ $SWIFTFOX_VERSION = "FEHLER" ]; then
+				continue
+			else
+				dialog --title " Swiftfox Version waehlen " --yesno "Moechtest du wirklich '$SWIFTFOX_VERSION' installieren?" 6 44 
+				if [ $RESULT1 = "0" ]; then
+					case $RESULT in
+						01) 
+							sudo aptitude install $SWIFTFOX_VERSION
+	  					;;
+	  					02)
+							sudo aptitude install $SWIFTFOX_VERSION
+	  					;;
+	  					03)
+							sudo aptitude install $SWIFTFOX_VERSION
+	  					;;
+	  					04)
+							sudo aptitude install $SWIFTFOX_VERSION
+						;;
+          					*)
+						continue
+						;;
+					esac
+				fi
+			fi
+		;;
+		\"19\")
+			grep -iv linux.dropbox $SOURCES > $TMPFILE
+			cp -p $TMPFILE $SOURCES
+ 			echo "deb http://linux.dropbox.com/ubuntu lucid main" | sudo tee -a $SOURCES > /dev/null
+			echo "deb-src http://linux.dropbox.com/ubuntu lucid main" | sudo tee -a $SOURCES > /dev/null
+			sudo apt-key adv --recv-keys --keyserver keyserver.ubuntu.com 5044912E
+			sudo apt-get update && sudo aptitude install nautilus-dropbox
+		;;
+        	\"20\")
+        		grep -iv pidgin-developers $SOURCES > $TMPFILE
+			cp -p $TMPFILE $SOURCES
+			launchpad "pidgin-developers/ppa" "Pidgin-Developers"
+			sudo apt-key adv --recv-keys --keyserver keyserver.ubuntu.com A1F196A8
+			sudo apt-get update && sudo aptitude install pidgin pidgin-microblog pidgin-facebookchat
+			if [ `which skype` != "/usr/bin/skype" ]; then
+				sudo aptitude install pidgin-skype
+			fi
+        	;;
+        	\"21\")
+			
+			sudo aptitude install gpm
+		;;
+		\"22\")
+			grep -iv claws-mail $SOURCES > $TMPFILE
+			cp -p $TMPFILE $SOURCES
+			launchpad "claws-mail/ppa" "Claws-Mail"
+			sudo apt-key adv --recv-keys --keyserver keyserver.ubuntu.com 5ED1D082
+			sudo apt-get update && sudo aptitude install claws-mail
+		;;
+		\"23\")
+			sudo aptitude install skype earcandy
+		;;
+		*)
+			echo "Fehler?!?!"   
+		;;
+	esac
+done
+}
+
+function ubuntu_tweak() {
+dialog --backtitle "Ubuntu-Tweak" \
+	--checklist "Ubuntu-Tweak: fuer Ubuntu 10.04" 100 100 15 \
+	01 "Window Buttons nach rechts verschieben (New Style)" off\
+	02 "Reset: Window Buttons nach rechts verschieben (Karmic Style)" off\
+	03 "Aendere den Update Manager - auto Benachrichtigung aus (Jaunty)" off\
+	04 "Reset: Aendere den Update Manager - auto Benachrichtigung an (vor Jaunty)" off\
+	05 "Ausschalten des GDM Login-Sound" off\
+	06 "Reset: Einschalten des GDM Login-Sound" off\
+	07 "mount-Drive Icons vom Desktop entfernen" off\
+	08 "Reset: mount-Drive Icons auf dem Desktop anzeigen" off\
+	09 "Icons im Menue anzeigen" off\
+	10 "Reset: Icons im Menue entfernen" off\
+	11 "Ausschalten der GDM Login User Liste" off\
+	12 "Reset: Einschalten der GDM Login User List" off\
+	13 "Entferne das ubuntu-docs Packet (252MB)" off\
+	14 "Reset: Installiere das ubuntu-docs Packet" off\
+	15 "Aedere den Gnome Kalender, erster Tag der Woche von Sonntag zu Montag" off\
+	16 "Reset: Aedere den Gnome Kalender, erster Tag der Woche von Montag zu Sonntag" off\
+	17 "Installiere und Konfiguriere Sharp-Fonts" off\
+	18 "Reset: Deconfigure Sharp-Fonts" off\
+	19 "Fix 'apt-get update' fuer Google-Repository" off\
+	20 "Reset: Fix 'apt-get update' fuer Google-Repository" off\
+	21 "Auto mount NTFS Partitionen beim Systemstart" off\
+	22 "Reset: Ausschalten des auto mount für NTFS Partitionen beim Systemstart" off\
+	23 "Codecs and Extras installieren" off\
+	24 "Firefox optimieren" off\
+	25 "IPv6 aktivieren (teredo)" off\
+	26 "Sprachdateien im Ubuntu aufraeumen" off\
+	27 "safe-rm - wichtige Dateien schuetzen" off 2>$TMPFILE
+if [ ${?} -ne 0 ]; then return; fi
+read RESULT <$TMPFILE
+ARRAY=($RESULT)
+dialog --title " Tweak " --yesno "Moechtest du die Aenderungen wirklich durchfuehren?" 6 44 
+RESULT1=$?
+if [ $RESULT1 = "1" ]; then return; fi
+for I in ${ARRAY[@]}; do
+	case $I in
+		\"01\")
+			sudo -u $ON_USER DBUS_SESSION_BUS_ADDRESS="$DBUS_SESSION_BUS_ADDRESS" gconftool-2 --type string --set /apps/metacity/general/button_layout "menu:minimize,maximize,spacer,close"
+		;;
+		\"02\")
+			sudo -u $ON_USER "DBUS_SESSION_BUS_ADDRESS="$DBUS_SESSION_BUS_ADDRESS gconftool-2 --type string --set /apps/metacity/general/button_layout "close,minimize,maximize:"    
+		;;
+		\"03\") 
+			sudo -u $ON_USER "DBUS_SESSION_BUS_ADDRESS="$DBUS_SESSION_BUS_ADDRESS gconftool -s --type bool /apps/update-notifier/auto_launch false
+		;;
+		\"04\")
+			sudo -u $ON_USER "DBUS_SESSION_BUS_ADDRESS="$DBUS_SESSION_BUS_ADDRESS gconftool -s --type bool /apps/update-notifier/auto_launch true  
+		;;
+		\"05\") 
+			sudo -u gdm gconftool-2 --set /desktop/gnome/sound/event_sounds --type bool false
+			sudo -u $ON_USER "DBUS_SESSION_BUS_ADDRESS="$DBUS_SESSION_BUS_ADDRESS gconftool-2 --set /desktop/gnome/sound/event_sounds --type bool false
+		;;
+		\"06\")
+			sudo -u gdm gconftool-2 --set /desktop/gnome/sound/event_sounds --type bool true
+			sudo -u $ON_USER "DBUS_SESSION_BUS_ADDRESS="$DBUS_SESSION_BUS_ADDRESS gconftool-2 --set /desktop/gnome/sound/event_sounds --type bool true     
+		;;
+		\"07\")
+			sudo -u $ON_USER "DBUS_SESSION_BUS_ADDRESS="$DBUS_SESSION_BUS_ADDRESS gconftool -s --type bool /apps/nautilus/desktop/volumes_visible false
+		;;
+		\"08\")
+			sudo -u $ON_USER "DBUS_SESSION_BUS_ADDRESS="$DBUS_SESSION_BUS_ADDRESS gconftool -s --type bool /apps/nautilus/desktop/volumes_visible true
+		;;
+		\"09\")
+			sudo -u $ON_USER "DBUS_SESSION_BUS_ADDRESS="$DBUS_SESSION_BUS_ADDRESS gconftool-2 --set /desktop/gnome/interface/buttons_have_icons --type bool true
+			sudo -u $ON_USER "DBUS_SESSION_BUS_ADDRESS="$DBUS_SESSION_BUS_ADDRESS gconftool-2 --set /desktop/gnome/interface/menus_have_icons --type bool true
+		;;
+		\"10\")
+			sudo -u $ON_USER "DBUS_SESSION_BUS_ADDRESS="$DBUS_SESSION_BUS_ADDRESS gconftool-2 --set /desktop/gnome/interface/buttons_have_icons --type bool false
+			sudo -u $ON_USER "DBUS_SESSION_BUS_ADDRESS="$DBUS_SESSION_BUS_ADDRESS gconftool-2 --set /desktop/gnome/interface/menus_have_icons --type bool false    
+		;;
+		\"11\") 
+			sudo -u gdm gconftool-2 --set --type boolean /apps/gdm/simple-greeter/disable_user_list true
+		;;
+		\"12\")
+			sudo -u gdm gconftool-2 --set --type boolean /apps/gdm/simple-greeter/disable_user_list false   
+		;;
+		\"13\")
+			sudo apt-get remove -y --force-yes ubuntu-docs
+		;;
+		\"14\")
+			sudo apt-get -y --force-yes install ubuntu-docs   
+		;;
+		\"15\")
+			TIMEE=$(grep "LC_TIME" /etc/default/locale)
+			if [ ! $TIMEE ]; then
+				dialog --backtitle "Locale" \
+				--form " You've selected to change Gnome Calendar first \nday of the week from Sunday to Monday. Please \nenter your country locale (e.g. en__GB, it__IT and \nso on) - required by this tweak. \n\nIf you do not enter a value, \"en__GB\" will be used. " 21 70 18 \
+				"locale" 4 4 "de_DE" 4 15 20 0\
+				2>$TMPFILE
+				if [ ${?} -ne 0 ]; then return; fi
+				read timeee <$TMPFILE
+				dialog --title " Locale eintragen " --yesno "Moechtest du wirklich folgendes wirklich eintragen \n $TIMEE" 10 75
+    				TIMEE1=$?
+    				if [ $TIMEE1 = "1" ]; then 
+    					echo LC_TIME=\"$TIMEE.UTF-8\" | sudo tee -a /etc/default/locale > /dev/null
+					dialog --title " Locale wurde gesetzt " --msgbox "\n $TIMEE" 10 75
+				else
+					echo LC_TIME=\"de_DE.UTF-8\" | sudo tee -a /etc/default/locale > /dev/null
+					dialog --title " Locale wurde gesetzt " --msgbox "\n de_DE.UTF-8" 10 75
+				fi
+			else
+				echo "You already have custom values for LC_TIME, skipping this tweak"
+			fi
+		;;
+		\"16\")
+			sudo sed -i '/^LC_TIME.*/d' /etc/default/locale;
+		;;   
+		\"17\")
+			testConnection
+			dialog --title " INFO: Bitte warten " --msgbox "\nDie installation der Sharp Fonts kann einen Moment dauern, abhänig von deiner Internet-Verbindung." 10 50
+			sudo apt-get install -y --force-yes cabextract ttf-droid msttcorefonts
+			cd /tmp
+			wget http://sharpfonts.com/fonts/andale32.exe; wget http://sharpfonts.com/fonts/arial32.exe; wget http://sharpfonts.com/fonts/arialb32.exe; wget http://sharpfonts.com/fonts/comic32.exe; wget http://sharpfonts.com/fonts/courie32.exe; wget http://sharpfonts.com/fonts/georgi32.exe; wget http://sharpfonts.com/fonts/impact32.exe; wget http://sharpfonts.com/fonts/tahoma32.exe; wget http://sharpfonts.com/fonts/times32.exe; wget http://sharpfonts.com/fonts/trebuc32.exe; wget http://sharpfonts.com/fonts/verdan32.exe; wget http://sharpfonts.com/fonts/webdin32.exe
+			if [ ! -d $TRUETYPEPATH ]; then
+				mkdir -p $TRUETYPEPATH
+			fi
+			cabextract -d /usr/share/fonts/truetype/ andale32.exe arial32.exe arialb32.exe comic32.exe courie32.exe georgi32.exe impact32.exe tahoma32.exe times32.exe trebuc32.exe verdan32.exe webdin32.exe
+			wget http://sharpfonts.com/fontconfig.tbz && tar xvjpf fontconfig.tbz -C /etc/fonts/
+			rm -r /tmp/*.exe > /dev/null 2>&1; rm /tmp/fontconfig.tbz > /dev/null 2>&1;
+			A="<?xml version=\"1.0\"?><!DOCTYPE fontconfig SYSTEM \"fonts.dtd\">" 
+			B="<fontconfig>"
+			C="<match target=\"font\" >"
+			D="<edit mode=\"assign\" name=\"rgba\" >"
+			E="<const>rgb</const>"
+			F="</edit>"
+			G="</match>"
+			H="<match target=\"font\" >"
+			I="<edit mode=\"assign\" name=\"hinting\" >"
+			J="<bool>true</bool>"
+			K="</edit>"
+			L="</match>"
+			M="<match target=\"font\" >"
+			N="<edit mode=\"assign\" name=\"hintstyle\" >"
+			O="<const>hintfull</const>"
+			P="</edit>"
+			Q="</match>"
+			R="<match target=\"font\" >"
+			S="<edit mode=\"assign\" name=\"antialias\" >"
+			T="<bool>true</bool>"
+			U="</edit>"
+			V="</match>"
+			W="<match target=\"font\">"
+			X="<test name=\"family\">"
+			Y="<string>FixedsysTTF</string>"
+			Z="</test>"
+			AA="<edit name=\"antialias\">"
+			AB="<bool>false</bool>"
+			AC="</edit>"
+			AD="</match>"
+			AE="<match target=\"font\">"
+			AF="<test name=\"family\">"
+			AG="<string>Tahoma</string>"
+			AH="</test>"
+			AI="<test compare=\"less\" name=\"size\" qual=\"any\">"
+			AJ="<double>9</double>"
+			AK="</test>"
+			AL="<edit name=\"antialias\">"
+ 			AM="<bool>false</bool>"
+			AN="</edit>"
+			AO="</match>"
+			AP="<match target=\"font\">"
+			AQ="<test name=\"family\">"
+			AR="<string>Times New Roman</string>"
+			AS="</test>"
+			AT="<test compare=\"less\" name=\"size\" qual=\"any\">"
+			AU="<double>13</double>"
+			AV="</test>"
+			AW="<edit name=\"antialias\">"
+			AX="<bool>false</bool>"
+			AY="</edit>"
+			AZ="</match>"
+			BA="<match target=\"font\">"
+			BB="<test name=\"family\">"
+			BC="<string>Courier</string>"
+			BD="<string>Courier New</string>"
+			BE="<string>Courier 10 Pitch</string>"
+			BF="</test>"
+			BG="<test compare=\"less\" name=\"size\" qual=\"any\">"
+			BH="<double>11</double>"
+			BI="</test>"
+			BJ="<edit name=\"antialias\">"
+			BK="<bool>false</bool>"
+			BL="</edit>"
+			BM="</match>"
+			BN="<match target=\"font\">"
+			BO="<test name=\"family\">"
+			BP="<string>Courier New</string>"
+			BQ="<string>Times New Roman</string>"
+			BR="<string>Tahoma</string>"
+			BS="<string>FixedsysTTF</string>"
+			BT="</test>"
+			BU="<edit mode=\"assign\" name=\"hintstyle\">"
+			BV="<const>hintslight</const>"
+			BW="</edit>"
+			BX="<edit mode=\"assign\" name=\"autohint\">"
+			BY="<bool>false</bool>"
+			BZ="</edit>"
+			CA="</match>"
+			CB="<match target=\"pattern\">"
+			CC="<test qual=\"any\" name=\"family\">"
+			CD="<string>Bitstream Vera Sans</string>"
+			CE="</test>"
+			CF="<edit name=\"family\" mode=\"assign\">"
+			CG="<string>Arial</string>"
+			CH="</edit>"
+			CI="</match>"
+			CJ="<match target=\"pattern\">"
+			CK="<test qual=\"any\" name=\"family\">"
+			CL="<string>Helvetica</string>"
+			CM="</test>"
+			CN="<edit name=\"family\" mode=\"assign\">"
+			CO="<string>Arial</string>"
+			CP="</edit>"
+			CQ="</match>"
+			CR="<match target=\"pattern\">"
+			CS="<test qual=\"any\" name=\"family\">"
+			CT="<string>Palatino</string>"
+			CU="</test>"
+			CV="<edit name=\"family\" mode=\"assign\">"
+			CW="<string>Georgia</string>"
+			CX="</edit>"
+			CY="</match>"
+			CZ="</fontconfig>"
+			echo -e "$A" "\n$B" "\n$C" "\n$D" "\n$E" "\n$F" "\n$G" "\n$H" "\n$I" "\n$J" "\n$K" "\n$L" "\n$M" "\n$N" "\n$O" "\n$P" "\n$Q" "\n$R" "\n$S" "\n$T" "\n$U" "\n$V" "\n$W" "\n$X" "\n$Y" "\n$Z" "$AA" "\n$AB" "\n$AC" "\n$AD" "\n$AE" "\n$AF" "\n$AG" "\n$AH" "\n$AI" "\n$AJ" "\n$AK" "\n$AL" "\n$AM" "\n$AN" "\n$AO" "\n$AP" "\n$AQ" "\n$AR" "\n$AS" "\n$AT" "\n$AU" "\n$AV" "\n$AW" "\n$AX" "\n$AY" "\n$AZ" "$BA" "\n$BB" "\n$BC" "\n$BD" "\n$BE" "\n$BF" "\n$BG" "\n$BH" "\n$BI" "\n$BJ" "\n$BK" "\n$BL" "\n$BM" "\n$BN" "\n$BO" "\n$BP" "\n$BQ" "\n$BR" "\n$BS" "\n$BT" "\n$BU" "\n$BV" "\n$BW" "\n$BX" "\n$BY" "\n$BZ" "$CA" "\n$CB" "\n$CC" "\n$CD" "\n$CE" "\n$CF" "\n$CG" "\n$CH" "\n$CI" "\n$CJ" "\n$CK" "\n$CL" "\n$CM" "\n$CN" "\n$CO" "\n$CP" "\n$CQ" "\n$CR" "\n$CS" "\n$CT" "\n$CU" "\n$CV" "\n$CW" "\n$CX" "\n$CY" "\n$CZ" > ~/.fonts.conf
+			chown $ON_USER ~/.fonts.conf
+			sudo chmod -w /usr/share/fonts -R
+			A="category truetype"
+			B="begin /usr/share/fonts/truetype/custom/tahoma.ttf"
+			C="Family = Tahoma"
+			D="FontName = Tahoma-Regular"
+			E="Encoding = Unicode"
+			F="Location = Magyar Dutch Spanish Czech Russian English Catalan Slovak Italian Turkish Danish Slovenian Basque Portuguese German Polish Swedish Norwegian French Finnish Greek"
+			G="Charset = ISO8859-1 ISO8859-2 ISO8859-3 ISO8859-4 ISO8859-5 ISO8859-7 ISO8859-9 ISO8859-10 ISO8859-13 ISO8859-14 ISO8859-15 KOI8-R KOI8-U CP1251 VISCII1.1-1 TCVN-5712 ISO10646-1"
+			H="UniCharset = ISO8859-1 ISO8859-2 ISO8859-3 ISO8859-4 ISO8859-5 ISO8859-7 ISO8859-9 ISO8859-10 ISO8859-13 ISO8859-14 ISO8859-15 KOI8-R KOI8-U CP1251 VISCII1.1-1 TCVN-5712"
+			I="GeneralFamily = SansSerif"
+			J="Weight = Medium"
+			K="Width = Variable"
+			L="Shape = NoSerif Upright"
+			M="Foundry = Microsoft"
+			N="Priority = 20"
+			O="end"
+			P="begin /usr/share/fonts/truetype/custom/tahomabd.ttf"
+			Q="Family = Tahoma"
+			R="FontName = Tahoma-Bold"
+			S="Encoding = Unicode"
+			T="Location = Magyar Dutch Spanish Czech Russian English Catalan Slovak Italian Turkish Danish Slovenian Basque Portuguese German Polish Swedish Norwegian French Finnish Greek"
+			U="Charset = ISO8859-1 ISO8859-2 ISO8859-3 ISO8859-4 ISO8859-5 ISO8859-7 ISO8859-9 ISO8859-10 ISO8859-13 ISO8859-14 ISO8859-15 KOI8-R KOI8-U CP1251 VISCII1.1-1 TCVN-5712 ISO10646-1"
+			V="UniCharset = ISO8859-1 ISO8859-2 ISO8859-3 ISO8859-4 ISO8859-5 ISO8859-7 ISO8859-9 ISO8859-10 ISO8859-13 ISO8859-14 ISO8859-15 KOI8-R KOI8-U CP1251 VISCII1.1-1 TCVN-5712"
+			W="GeneralFamily = SansSerif"
+			X="Weight = Bold"
+			Y="Width = Variable"
+			Z="Shape = NoSerif Upright"
+			AA="Foundry = Microsoft"
+			AB="Priority = 20"
+			AC="end"
+			sudo echo -e "$A" "\n$B" "\n$C" "\n$D" "\n$E" "\n$F" "\n$G" "\n$H" "\n$I" "\n$J" "\n$K" "\n$L" "\n$M" "\n$N" "\n$O" "\n$P" "\n$Q" "\n$R" "\n$S" "\n$T" "\n$U" "\n$V" "\n$W" "\n$X" "\n$Y" "\n$Z" "\n$AA" "\n$AB" "\n$AC" > /etc/defoma/hints/custom.hints
+			sudo dpkg-reconfigure fontconfig
+			sudo fc-cache -fv
+			dialog --title " INFO: Installation abgeschlossen " --msgbox "\nDie installation der Sharp Fonts wurde erfolgreich abgeschlossen." 10 50
+		;;
+		\"18\")
+			rm /etc/fonts/alias.conf /etc/fonts/local.conf /etc/fonts/misc.conf /etc/fonts/msfonts-rules.conf ~/.fonts.conf > /dev/null 2>&1;
+			sudo rm /etc/defoma/hints/custom.hints > /dev/null 2>&1;
+		;;
+		\"19\")
+			echo "Acquire::http::Pipeline-Depth \"0\";" | sudo tee -a /etc/apt/apt.conf.d/90localsettings > /dev/null
+		;;
+		\"20\")
+			sudo rm /etc/apt/apt.conf.d/90localsettings_back > /dev/null 2>&1; sudo cp /etc/apt/apt.conf.d/90localsettings /etc/apt/apt.conf.d/90localsettings_back; sudo sed -i '/^Acquire::http::Pipeline-Depth.*/d' /etc/apt/apt.conf.d/90localsettings_back | sudo sed -i '/^Acquire::http::Pipeline-Depth.*/d' /etc/apt/apt.conf.d/90localsettings; sudo rm /etc/apt/apt.conf.d/90localsettings_back > /dev/null 2>&1;
+		;;
+		\"21\")
+        		sudo apt-get -y --force-yes install ntfs-3g
+			if [ $(grep '^[^#].*ntfs-3g' /etc/fstab | wc -l) -gt 0 ]; then
+				dialog --title " INFO: NTFS-3G wird bereits verwendet " --msgbox "\nNTFS-3G wird auf deinem System bereits verwendet." 10 50
+			else
+				NTFSS=$(sudo blkid -c /dev/null -t TYPE=ntfs | cut -d ':' -f 1 > $TMPFILE)
+				while read curline; do
+					DIRR=$(echo $CURLINE | cut -c 6- | sed -e 's/\///g')
+					sudo mkdir /media/$DIRR
+					NTFSUUID=$(sudo blkid -c /dev/null -t TYPE=ntfs | grep $curline | cut -d '"' -f 4)
+					eval "echo UUID=$NTFSUUID	/media/$DIRR ntfs-3g	users	0	0" | sudo tee -a /etc/fstab > /dev/null
+				done < $TMPFILE
+			fi
+			rm $TMPFILE > /dev/null 2>&1;
+			dialog --title " INFO: NTFS-3G wurde installiert " --msgbox "\nNTFS-3G wird nun auf deinem System verwendet." 10 50
+		;;
+		\"22\")
+			sudo sed -i '/^UUID.*ntfs-3g.*/d' /etc/fstab;
+		;;
+		\"23\")
+			if [ "i686" = `uname -m` ]; then
+				sudo echo sun-java6-jre shared/accepted-sun-dlj-v1-1 select true | sudo /usr/bin/debconf-set-selections
+				sudo apt-get install --yes sun-java6-plugin
+				sudo apt-get -y --force-yes install gstreamer0.10-ffmpeg gstreamer0.10-pitfdll gstreamer0.10-plugins-bad gstreamer0.10-plugins-bad-multiverse gstreamer0.10-plugins-ugly gstreamer0.10-plugins-ugly-multiverse libdvdnav4 libdvdread4 libdvdcss2 libxine1-ffmpeg ffmpeg w32codecs flashplugin-nonfree sun-java6-fonts rar unrar p7zip-full p7zip-rar unace unp ttf-mscorefonts-installer ttf-liberation mencoder
+			else
+				sudo echo sun-java6-jre shared/accepted-sun-dlj-v1-1 select true | sudo /usr/bin/debconf-set-selections
+				sudo apt-get install --yes sun-java6-plugin
+				sudo apt-get -y --force-yes install gstreamer0.10-ffmpeg gstreamer0.10-plugins-bad gstreamer0.10-plugins-bad-multiverse gstreamer0.10-plugins-ugly gstreamer0.10-plugins-ugly-multiverse libdvdnav4 libdvdread4 libdvdcss2 libxine1-ffmpeg ffmpeg w64codecs sun-java6-fonts rar unrar p7zip-full p7zip-rar unace unp ttf-mscorefonts-installer ttf-liberation mencoder
+			fi
+		;;
+		\"24\")
+				BASHRC="~/.bashrc"
+				sed -i '/*MOZ_DISABLE_PANGO.*/d' $BASHRC
+				echo "export MOZ_DISABLE_PANGO=1" >> $BASHRC
+				source $BASHRC
+				# FEHLER wenn bereits installiert
+				sudo aptitude install sqlite3
+				pkill -9 firefox*
+				for f in ~/.mozilla/firefox/*/*sqlite; do sqlite3 $f 'VACUUM;'; done
+				dialog --backtitle "Firefox optimieren" \
+				--radiolist "Bitte auswaehlen" 30 60 8 \
+				01 "Schneller Computer / Schnelle Verbindung (> DSL 2000)" off\
+				02 "Schneller Computer / Langsamere Verbindung (<= DSL 1000)" off\
+				03 "Schneller Computer / Langsame Verbindung (z.B. ISDN) " off\
+				04 "Langsamer Computer / Schnelle Verbindung " off\
+				05 "Langsamer Computer / Langsame Verbindung" on 2>$TMPFILE
+			if [ ${?} -ne 0 ]; then return; fi
+			read RESULT <$TMPFILE
+			case $RESULT in
+    				01)
+    				A="user_pref(\"network.http.pipelining\", true);"
+    				B="user_pref(\"network.http.pipelining.firstrequest\", true);"
+    				C="user_pref(\"network.http.proxy.pipelining\", true);"
+    				D="user_pref(\"network.http.pipelining.maxrequests\", 10);"
+    				E="user_pref(\"network.http.keep-alive\", true);"
+    				F="user_pref(\"content.notify.backoffcount\", 5);"
+    				G="user_pref(\"content.interrupt.parsing\", true);"
+    				H="user_pref(\"content.max.tokenizing.time\", 2250000);"
+    				I="user_pref(\"content.notify.interval\", 750000);"
+    				J="user_pref(\"content.notify.ontimer\", true);"
+    				K="user_pref(\"content.switch.threshold\", 750000);" 
+    				L="user_pref(\"nglayout.initialpaint.delay\", 0);"
+    				M="user_pref(\"network.http.max-connections\", 48);" 
+    				N="user_pref(\"network.http.max-connections-per-server\", 32);" 
+    				O="user_pref(\"network.http.max-persistent-connections-per-proxy\", 16);" 
+    				P="user_pref(\"network.http.max-persistent-connections-per-server\", 8);"
+    				Q="user_pref(\"browser.cache.memory.capacity\", 65536);"
+    				R="user_pref(\"ui.submenuDelay\", 0);"
+    				S="user_pref(\"platform_file_picker\", true);"
+    				T="user_pref(\"layout.spellcheckDefaultlayout.spellcheckDefault\", 2);"
+    				U="user_pref(\"browser.urlbar.autoFill\", true);"
+    				V="user_pref(\"browser.tabs.closeWindowWithLastTab\", false);"
+    				W="user_pref(\"browser.link.open_newwindow.restriction\", 2);"
+    				X="user_pref(\"browser.link.open_newwindow.restriction\", 60000);"
+    				Y="user_pref(\"view_source.editor.external\", true);"
+    				Z="user_pref(\"view_source.editor.path\", /usr/bin/gedit);"
+    				AA="user_pref(\"security.dialog_enable_delay\", 1000);"
+    				BA="user_pref(\"nglayout.initialpaint.delay\", 0);"
+    				cd ~/.mozilla/firefox/*.default/ && echo -e "$A" "\n$B" "\n$C" "\n$D" "\n$E" "\n$F" "\n$G" "\n$H" "\n$I" "\n$J" "\n$K" "\n$L" "\n$M" "\n$N" "\n$O" "\n$P" "\n$Q" "\n$R" "\n$S" "\n$T" "\n$U" "\n$V" "\n$W" "\n$X" "\n$Y" "\n$Z" "\n$AA" "\n$AB" > user.js
+    				;;
+    				02)
+    				A="user_pref(\"network.http.pipelining\", true);"
+    				B="user_pref(\"network.http.pipelining.firstrequest\", true);"
+    				C="user_pref(\"network.http.proxy.pipelining\", true);"
+    				D="user_pref(\"network.http.pipelining.maxrequests\", 10);" 
+    				E="user_pref(\"network.http.keep-alive\", true);"
+    				F="user_pref(\"content.notify.backoffcount\", 5);"
+    				G="user_pref(\"content.max.tokenizing.time\", 2250000);"
+    				H="user_pref(\"content.notify.interval\", 750000);"
+    				I="user_pref(\"content.notify.ontimer\", true);"
+    				J="user_pref(\"content.switch.threshold\", 750000);"
+    				K="user_pref(\"network.http.max-connections\", 48);"
+    				L="user_pref(\"network.http.max-connections-per-server\", 16);"
+    				M="user_pref(\"network.http.max-persistent-connections-per-proxy\", 16);"
+    				N="user_pref(\"network.http.max-persistent-connections-per-server\", 8);"
+    				O="user_pref(\"nglayout.initialpaint.delay\", 0);"
+    				P="user_pref(\"browser.cache.memory.capacity\", 65536);"
+    				Q="user_pref(\"ui.submenuDelay\", 0);"
+    				R="user_pref(\"platform_file_picker\", true);"
+    				S="user_pref(\"layout.spellcheckDefaultlayout.spellcheckDefault\", 2);"
+    				T="user_pref(\"browser.urlbar.autoFill\", true);"
+    				U="user_pref(\"browser.tabs.closeWindowWithLastTab\", false);"
+    				V="user_pref(\"browser.link.open_newwindow.restriction\", 2);"
+    				W="user_pref(\"browser.link.open_newwindow.restriction\", 60000);"
+    				X="user_pref(\"view_source.editor.external\", true);"
+    				Y="user_pref(\"view_source.editor.path\", /usr/bin/gedit);"
+    				Z="user_pref(\"security.dialog_enable_delay\", 1000);"
+    				AA="user_pref(\"nglayout.initialpaint.delay\", 0);"
+				cd ~/.mozilla/firefox/*.default/ && echo -e "$A" "\n$B" "\n$C" "\n$D" "\n$E" "\n$F" "\n$G" "\n$H" "\n$I" "\n$J" "\n$K" "\n$L" "\n$M" "\n$N" "\n$O" "\n$P" "\n$Q" "\n$R" "\n$S" "\n$T" "\n$U" "\n$V" "\n$W" "\n$X" "\n$Y" "\n$Z" "\n$AA" > user.js
+   				;;
+  				03)
+    				A="user_pref(\"network.http.pipelining\", true);"
+    				B="user_pref(\"network.http.pipelining.firstrequest\", true);"
+    				C="user_pref(\"network.http.proxy.pipelining\", true);"
+    				D="user_pref(\"network.http.pipelining.maxrequests\", 10);"
+    				E="user_pref(\"network.http.keep-alive\", true);"
+    				F="user_pref(\"content.notify.backoffcount\", 5);"
+    				G="user_pref(\"content.interrupt.parsing\", true);"
+    				H="user_pref(\"content.max.tokenizing.time\", 3000000);"
+    				I="user_pref(\"content.maxtextrun\", 8191);"
+    				J="user_pref(\"content.notify.interval\", 750000);"
+    				K="user_pref(\"content.notify.ontimer\", true);"
+    				L="user_pref(\"content.switch.threshold\", 750000);"
+    				M="user_pref(\"network.http.max-connections\", 32);"
+    				N="user_pref(\"network.http.max-connections-per-server\", 8);"
+    				O="user_pref(\"network.http.max-persistent-connections-per-proxy\", 8);"
+    				P="user_pref(\"network.http.max-persistent-connections-per-server\", 4);"
+    				Q="user_pref(\"nglayout.initialpaint.delay\", 0);"
+    				R="user_pref(\"browser.cache.memory.capacity\", 65536);"
+    				S="user_pref(\"ui.submenuDelay\", 0);"
+				T="user_pref(\"platform_file_picker\", true);"
+    				U="user_pref(\"layout.spellcheckDefaultlayout.spellcheckDefault\", 2);"
+    				V="user_pref(\"browser.urlbar.autoFill\", true);"
+    				W="user_pref(\"browser.tabs.closeWindowWithLastTab\", false);"
+    				X="user_pref(\"browser.link.open_newwindow.restriction\", 2);"
+    				Y="user_pref(\"browser.link.open_newwindow.restriction\", 60000);"
+    				Z="user_pref(\"view_source.editor.external\", true);"
+    				AA="user_pref(\"view_source.editor.path\", /usr/bin/gedit);"
+    				AB="user_pref(\"security.dialog_enable_delay\", 1000);"
+    				AC="user_pref(\"nglayout.initialpaint.delay\", 0);"
+    				cd ~/.mozilla/firefox/*.default/ && echo -e "$A" "\n$B" "\n$C" "\n$D" "\n$E" "\n$F" "\n$G" "\n$H" "\n$I" "\n$J" "\n$K" "\n$L" "\n$M" "\n$N" "\n$O" "\n$P" "\n$Q" "\n$R" "\n$S" "\n$T" "\n$U" "\n$V" "\n$W" "\n$X" "\n$Y" "\n$Z" "\n$AA" "\n$AB" "\n$AC" > user.js
+				;;
+				04)
+    				A="user_pref(\"network.http.pipelining\", true);"
+    				B="user_pref(\"network.http.pipelining.firstrequest\", true);"
+    				C="user_pref(\"network.http.proxy.pipelining\", true);"
+    				D="user_pref(\"network.http.pipelining.maxrequests\", 10);" 
+    				E="user_pref(\"network.http.keep-alive\", true);"
+    				F="user_pref(\"content.notify.backoffcount\", 5);"
+    				G="user_pref(\"content.max.tokenizing.time\", 3000000);"
+    				H="user_pref(\"content.notify.backoffcount\", 5);"
+    				I="user_pref(\"content.notify.interval\", 1000000);"
+    				J="user_pref(\"content.notify.ontimer\", true);"
+				K="user_pref(\"content.switch.threshold\", 1000000);"
+				L="user_pref(\"content.maxtextrun\", 4095);"
+    				M="user_pref(\"nglayout.initialpaint.delay\", 1000);"
+    				N="user_pref(\"network.http.max-connections\", 48);" 
+    				O="user_pref(\"network.http.max-connections-per-server\", 16);"
+    				P="user_pref(\"network.http.max-persistent-connections-per-proxy\", 16);"
+    				Q="user_pref(\"network.http.max-persistent-connections-per-server\", 8);"
+				R="user_pref(\"dom.disable_window_status_change\", true);"
+				S="user_pref(\"platform_file_picker\", true);"
+    				T="user_pref(\"layout.spellcheckDefaultlayout.spellcheckDefault\", 2);"
+    				U="user_pref(\"browser.urlbar.autoFill\", true);"
+    				V="user_pref(\"browser.tabs.closeWindowWithLastTab\", false);"
+    				W="user_pref(\"browser.link.open_newwindow.restriction\", 2);"
+    				X="user_pref(\"browser.link.open_newwindow.restriction\", 60000);"
+    				Y="user_pref(\"view_source.editor.external\", true);"
+    				Z="user_pref(\"view_source.editor.path\", /usr/bin/gedit);"
+    				AA="user_pref(\"security.dialog_enable_delay\", 1000);"
+    				AB="user_pref(\"nglayout.initialpaint.delay\", 100);"
+				cd ~/.mozilla/firefox/*.default/ && echo -e "$A" "\n$B" "\n$C" "\n$D" "\n$E" "\n$F" "\n$G" "\n$H" "\n$I" "\n$J" "\n$K" "\n$L" "\n$M" "\n$N" "\n$O" "\n$P" "\n$Q" "\n$R" "\n$S" "\n$T" "\n$U" "\n$V" "\n$W" "\n$X" "\n$Y" "\n$Z" "\n$AA" "\n$AB" > user.js
+				;;
+				05)
+    				A="user_pref(\"network.http.pipelining\", true);" 
+    				B="user_pref(\"network.http.pipelining.firstrequest\", true);"
+    				C="user_pref(\"network.http.proxy.pipelining\", true);"
+    				D="user_pref(\"network.http.pipelining.maxrequests\", 10);"
+    				E="user_pref(\"network.http.keep-alive\", true);"
+    				F="user_pref(\"content.notify.backoffcount\", 5);" 
+    				G="user_pref(\"content.max.tokenizing.time\", 2250000);"
+				H="user_pref(\"content.notify.interval\", 750000);"
+				I="user_pref(\"content.notify.ontimer\", true);"
+				J="user_pref(\"content.switch.threshold\", 750000);"
+    				K="user_pref(\"nglayout.initialpaint.delay\", 750);"
+    				L="user_pref(\"network.http.max-connections\", 32);"
+    				M="user_pref(\"network.http.max-connections-per-server\", 8);"
+    				N="user_pref(\"network.http.max-persistent-connections-per-proxy\", 8);"
+    				O="user_pref(\"network.http.max-persistent-connections-per-server\", 4);"
+    				P="user_pref(\"dom.disable_window_status_change\", true);"
+    				Q="user_pref(\"platform_file_picker\", true);"
+    				R="user_pref(\"layout.spellcheckDefaultlayout.spellcheckDefault\", 2);"
+    				S="user_pref(\"browser.urlbar.autoFill\", true);"
+    				T="user_pref(\"browser.tabs.closeWindowWithLastTab\", false);"
+    				U="user_pref(\"browser.link.open_newwindow.restriction\", 2);"
+    				V="user_pref(\"browser.link.open_newwindow.restriction\", 60000);"
+    				W="user_pref(\"view_source.editor.external\", true);"
+    				X="user_pref(\"view_source.editor.path\", /usr/bin/gedit);"
+    				Y="user_pref(\"security.dialog_enable_delay\", 1000);"
+    				Z="user_pref(\"nglayout.initialpaint.delay\", 100);"
+				cd ~/.mozilla/firefox/*.default/ && echo -e "$A" "\n$B" "\n$C" "\n$D" "\n$E" "\n$F" "\n$G" "\n$H" "\n$I" "\n$J" "\n$K" "\n$L" "\n$M" "\n$N" "\n$O" "\n$P" "\n$Q" "\n$R" "\n$S" "\n$T" "\n$U" "\n$V" "\n$W" "\n$X" "\n$Y" "\n$Z" > user.js
+				;;
+				*)
+					continue
+				;;
+			esac
+			cd ~/Desktop/
+		;;
+		\"25\")
+			sudo aptitude install miredo
+			sudo /etc/init.d/miredo start
+			ping6 -c 4 ipv6.google.com
+#echo "#disable ipv6" | sudo tee -a /etc/sysctl.conf
+#echo "net.ipv6.conf.all.disable_ipv6 = 1" | sudo tee -a /etc/sysctl.conf
+#echo "net.ipv6.conf.default.disable_ipv6 = 1" | sudo tee -a /etc/sysctl.conf
+#echo "net.ipv6.conf.lo.disable_ipv6 = 1" | sudo tee -a /etc/sysctl.conf
+		;;
+		\"26\")
+			sudo aptitude install localepurge
+		;;
+		\"27\")
+			sudo aptitude install safe-rm
+		;;
+		*)
+			echo "Fehler?!?!"   
+		;;
+	esac
+done
+}
+
+function radiolist() {
+dialog --backtitle "sources.list - Ubuntu Version" \
+	--radiolist "Ubuntu Version waehlen" 15 50 8 \
+	01 "intrepid" off\
+	02 "jaunty" off\
+	03 "karmic" off\
+	04 "lucid" on 2>$TMPFILE
+if [ ${?} -ne 0 ]; then return; fi
+read RESULT <$TMPFILE
+case $RESULT in
+    01)
+	UBUNTU_VERSION="intrepid"	
+    ;;
+    02)
+      	UBUNTU_VERSION="jaunty"
+    ;;
+    03)
+	UBUNTU_VERSION="karmic"
+    ;;
+    04)
+	UBUNTU_VERSION="lucid"
+    ;;
+    *)
+	UBUNTU_VERSION="FEHLER"
+    ;;
+esac
+if [ $UBUNTU_VERSION = "FEHLER" ]; then
+	continue
+else
+	dialog --title " Ubuntu Version waehlen " --yesno "Moechtest du wirklich alle sources.list Eintraege auf '$UBUNTU_VERSION' aendern?" 6 44 
+	RESULT1=$?
+	if [ $RESULT1 = "1" ]; then return; fi
+	case $RESULT in
+		01) 
+			sed -i "s/jaunty/intrepid/g" $SOURCES
+			sed -i "s/karmic/intrepid/g" $SOURCES
+			sed -i "s/lucid/intrepid/g" $SOURCES
+	  	;;
+	  	02)
+			sed -i "s/intrepid/jaunty/g" $SOURCES
+			sed -i "s/karmic/jaunty/g" $SOURCES
+			sed -i "s/lucid/jaunty/g" $SOURCES
+	  	;;
+	  	03)
+			sed -i "s/intrepid/karmic/g" $SOURCES
+			sed -i "s/jaunty/karmic/g" $SOURCES
+			sed -i "s/lucid/karmic/g" $SOURCES
+	  	;;
+	  	04)
+			sed -i "s/intrepid/lucid/g" $SOURCES
+			sed -i "s/jaunty/lucid/g" $SOURCES
+			sed -i "s/karmic/lucid/g" $SOURCES
+		;;
+          	*)
+			continue
+		;;
+	esac
+fi
+} 
+
+function repositories_eintragen() {
+dialog --backtitle "Repositories eintragen" \
+	--form " Repositories eintragen - use [up] [down] to select input field " 21 70 18 \
+	"URL" 2 4 "http://deb.opera.com/opera/" 2 15 50 0\
+	"DISTRO" 4 4 "sid" 4 15 50 0\
+	"WAS" 6 4 "non-free" 6 15 50 0\
+	2>$TMPFILE	
+if [ ${?} -ne 0 ]; then return; fi   
+N=1
+while read RESULT; do
+	ARRAY[$N]=$RESULT
+	N=`expr $N + 1`
+done < $TMPFILE
+dialog --title " Repositories eintragen " --yesno "Moechtest du folgendes wirklich eintragen \n deb ${ARRAY[*]}" 10 75
+RESULT1=$?
+if [ $RESULT1 = "1" ]; then return; fi
+grep -iv ${ARRAY[2]} $SOURCES > $TMPFILE
+cp -p $TMPFILE $SOURCES
+echo "deb ${ARRAY[*]}" >> $SOURCES
+dialog --title "neuer Eintag in der sources.list" \
+	--msgbox "\n deb ${ARRAY[*]}" 10 75
+}
+
+function suckup_sources() {
+# check-funktion wird aufgerufen
+testConnection
+# wenn eine Internet-Verbindung besteht, dann lade die sources.list von suckup.de herunter
+if [ $INTERNET != "no" ]; then
+	wget -q http://suckup.de/sources_karmic.txt -O $TMPFILE &
+	WGET_PID=$!
+# solange wget laeft, wird dessen Download angezeigt
+	while [ 1 ]; do
+		{ for I in $(seq 1 100) ; do
+			echo $I
+       	 		sleep 0.01
+        	done
+        	echo 100; } | dialog --backtitle "wget - Progress" \
+		--gauge "Progress" 6 60 0
+	if [ `ps | grep -c $WGET_PID` -eq 0 ]; then
+    		break
+    	fi
+	done
+# wenn die Datei heruntergeladen wurd und nicht leer ist
+	if [ -e $TMPFILE ] && [ -n $TMPFILE ]; then
+		dialog --backtitle "suckup.de - sources.list fuer Ubuntu 10.04 - use [up] [down] to scroll" \
+			--begin 3 5 --title " File: $TMPFILE " \
+			--textbox $TMPFILE 50 140
+    	else
+        	dialog --msgbox "*** ERROR ***\n$TMPFILE ist nicht vorhanden" 6 42
+	fi
+else
+        dialog --msgbox "*** ERROR ***\nEs besteht keine Internet-Verbindung." 6 42
+fi
+}
+
+function main_menu() {
+dialog --backtitle "suckup.de" --title " ubuntu-10.04-tweak - V. $VERSION "\
+	--no-shadow\
+	--no-cancel\
+        --menu "Move using [UP] [DOWN], [Enter] to select" 15 80 10\
+	deine_sources.list "deine source.list (q - zum beenden)"\
+	suckup_sources.list "meine source.list (Enter - zum beenden)"\
+	Repositories "Repositories selber eintragen"\
+        extra_Repositories "Repositories: fuer Ubuntu 10.04"\
+       	Ubuntu_Tweak "Ubuntu Einstellungen anpassen"\
+        Ubuntu_Version "Waehle eine Ubuntu-Version"\
+	Update "Paketdefinitionen aktualisieren"\
+        Quit "Exit" 2>$TMPFILE
+	    
+	opt=${?}
+	if [ ${?} -ne 0 ]; then return; fi
+	read menuitem <$TMPFILE
+	case $menuitem in
+		deine_sources.list) less $SOURCES;;
+		suckup_sources.list) suckup_sources;;
+		Repositories) repositories_eintragen;;
+		extra_Repositories) launchpad_add;;
+		Ubuntu_Tweak) ubuntu_tweak;;
+		Ubuntu_Version) radiolist;;
+		Update) apt-get update;;
+		Quit) sudo rm $TMPFILE; sudo apt-get clean; sudo apt-get autoclean; exit;;
+	esac
+}
+
+while true; do
+	main_menu
+done
+
+
+# localepurge
+# saverm
+# dpkg -S `which ls`
+# startupmanager
+
+
+#echo -e $YELLOW"Cleaning apt cache..."$ENDCOLOR
+#aptitude clean
+#echo -e $YELLOW"Removing old config files..."$ENDCOLOR
+#sudo aptitude purge $OLDCONF
+#echo -e $YELLOW"Removing old kernels..."$ENDCOLOR
+#sudo aptitude purge $OLDKERNELS
+#echo -e $YELLOW"Emptying every trashes..."$ENDCOLOR
+#rm -rf /home/*/.local/share/Trash/*/** &> /dev/null
+#rm -rf /root/.local/share/Trash/*/** &> /dev/null
+#
+#echo -e $YELLOW"Script Finished!"$ENDCOLOR
+#
+#
+#OLDCONF=$(dpkg -l|grep "^rc"|awk '{print $2}')
+#CURKERNEL=$(uname -r|sed 's/-*[a-z]//g'|sed 's/-386//g')
+#LINUXPKG="linux-(image|headers|ubuntu-modules|restricted-modules)"
+#METALINUXPKG="linux-(image|headers|restricted-modules)-(generic|i386|server|common|rt|xen)"
+#OLDKERNELS=$(dpkg -l|awk '{print $2}'|grep -E $LINUXPKG |grep -vE $METALINUXPKG|grep -v $CURKERNEL)
+#YELLOW="\033[1;33m"
+#RED="\033[0;31m"
+#ENDCOLOR="\033[0m"
+#
+#if [ $USER != root ]; then
+#  echo -e $RED"Error: must be root"
+#  echo -e $YELLOW"Exiting..."$ENDCOLOR
+#  exit 0
+#fi
+#
+#echo -e $YELLOW"Cleaning apt cache..."$ENDCOLOR
+#aptitude clean
+#
+#echo -e $YELLOW"Removing old config files..."$ENDCOLOR
+#
+#
+#cd /usr/share/gdm/themes/
+#sudo tar -xzf /home/johannes/Dropbox/Sicherung/UbuntuBlackGDM/ubuntu-black.tar.gz
+#sudo chown -R root:root /usr/share/gdm/themes/ubuntu-black
+#sudo chmod -R 755 /usr/share/gdm/themes/ubuntu-black
+#sudo sed -i 's/GraphicalTheme=Human/GraphicalTheme=ubuntu-black/g' /etc/gdm/gdm.conf-custom
+#sudo invoke-rc.d gdm reload
+#
+#dialog --colors --infobox "\Zb\Z1Hi \Z5there" 3 12
+#
+#			        
+
+# prelink preload
+#sudo apt-get -y purge empathy usb-creator-common gnome-disk-utility f-spot
+#sudo apt-get -y purge openjdk-6-jre-headless openjdk-6-jre
+#sudo apt-get -y purge python-ubuntuone-client python-ubuntuone-storageprotocol evolution-couchdb
+
+
+#sudo apt-get -y install grub2-splashimages
+# Theme auswählen #
+#gconftool-2 -s /desktop/gnome/interface/gtk_theme --type=string Dust
+
+# Maus anpassen #
+#gconftool-2 -s /desktop/gnome/peripherals/mouse/cursor_theme --type=string whiteglass
+#gconftool-2 -s /desktop/gnome/peripherals/mouse/cursor_size --type=int 24
+
+# Fenstertitel #
+#gconftool-2 -s /apps/metacity/general/theme --type=string Dust
+
+# Keine Desktop-Symbole für Festplatten/Sticks aber für Home und Computer #
+#gconftool-2 -s /apps/nautilus/desktop/volumes_visible --type=bool false
+#gconftool-2 -s /apps/nautilus/desktop/computer_icon_visible --type=bool true
+#gconftool-2 -s /apps/nautilus/desktop/home_icon_visible --type=bool true
+
+# Groeßere Terminal Schrift und Transparenz #
+#gconftool-2 -s /apps/gnome-terminal/profiles/Default/use_system_font --type=bool false
+#gconftool-2 -s /apps/gnome-terminal/profiles/Default/background_type --type=string transparent
+#gconftool-2 -s /apps/gnome-terminal/profiles/Default/background_darkness --type=float 0.85
+#gconftool-2 -s /apps/gnome-terminal/profiles/Default/use_theme_colors --type=bool false
+#gconftool-2 -s /apps/gnome-terminal/profiles/Default/foreground_color --type=string "#0000FFFF0000"
+#gconftool-2 -s /apps/gnome-terminal/profiles/Default/background_color --type=string "#000000000000"
+#gconftool-2 -s /apps/gnome-terminal/profiles/Default/scrollback_lines --type=int 7000 
+
+# Nautilus Hintergrund #
+#gconftool-2 -s /apps/nautilus/preferences/background_filename --type=string file:///usr/share/nautilus/patterns/blue_ridge.png
+#gconftool-2 -s /apps/nautilus/preferences/background_set --type=bool true
+
+# Mehr Desktophintergründe und Hintergrund einstellen #
+##sudo cp -v ~/ownosinstall/pictures/background/* /usr/share/backgrounds/
+#gconftool-2 -s /desktop/gnome/background/picture_filename --type=string /usr/share/backgrounds/Frog.jpg
+
+# Taste "Rollen" oeffnet Terminal #
+#gconftool-2 -s /apps/metacity/global_keybindings/run_command_terminal --type=string Scroll_Lock
+
+# Gnome-do versteckt starten, anderes Aussehen und Autostart #
+#gconftool-2 -s /apps/gnome-do/preferences/Do/CorePreferences/QuietStart --type=bool true
+#gconftool-2 -s /apps/gnome-do/preferences/Do/CorePreferences/Theme --type=string "Glass Interface"
+#gconftool-2 --load ~/ownosinstall/prefs/gnome-do-preferences
+#mkdir -v ~/.config/autostart
+#cp -v ~/ownosinstall/prefs/autostart/gnome-do.desktop ~/.config/autostart/
+
+# Mausrad auf Fensterleiste = einrollen #
+#gconftool-2 -s /apps/gwd/mouse_wheel_action --type=string shade
+
+# Panel anpassen und Home #
+#cp -v ~/ownosinstall/prefs/Panel/nautilus.desktop ~/.gnome2/panel2.d/default/launchers/
+#gconftool-2 --load ~/ownosinstall/prefs/gnome-panel.entries
+#sudo cp /usr/share/icons/hicolor/32x32/apps/nautilus.png /usr/share/icons/gnome-wise/32x32/apps/system-file-manager.png
+#sudo cp /usr/share/icons/hicolor/24x24/apps/nautilus.png /usr/share/icons/gnome-wise/24x24/apps/system-file-manager.png
+#sudo cp /usr/share/icons/hicolor/22x22/apps/nautilus.png /usr/share/icons/gnome-wise/22x22/apps/system-file-manager.png
+#sudo cp /usr/share/icons/hicolor/16x16/apps/nautilus.png /usr/share/icons/gnome-wise/16x16/apps/system-file-manager.png
+#rm examples.desktop
+#gconftool-2 -s /schemas/apps/window_list_applet/prefs/group_windows --type=string auto
+#gconftool-2 -s /schemas/apps/window_list_applet/prefs/group_windows/schema_key  --type=string auto
+
+# Docky Einträge #
+#gconftool-2 --load ~/ownosinstall/prefs/docky
+
+# 4 Standartschreibtische #
+#gconftool-2 -s /apps/metacity/general/num_workspaces  --type=int 4
+
+
+## Programme anpassen ##
+
+# Evolution starten ohne Assistent #
+#gconftool-2 --load ~/ownosinstall/prefs/evolutionmailvorlage
+
+# Autostart - Docky zur Auswahl stellen aber deaktiviert lassen #
+#cp -v ~/ownosinstall/prefs/autostart/docky.desktop ~/.config/autostart
+
+# AudioCDs auslesen als mp3 #
+#gconftool-2 -s /apps/sound-juicer/audio_profile --type=string mp3
+
+# Deutsch Woerterbuch #
+#mkdir ~/.gnome2/gnome-dictionary
+#cp ~/ownosinstall/prefs/source-1271076004-2058.desktop ~/.gnome2/gnome-dictionary/
+#gconftool-2 --load ~/ownosinstall/prefs/dictionary
+
+# gEdit Texteditor - angepasste Symbolleiste#
+#gconftool-2 --load ~/ownosinstall/prefs/gedit-2.entries
+
+# Gtk-recordMyDesktop - fps anpassen #
+#cp ~/ownosinstall/prefs/.gtk-recordmydesktop ~/
+
+# Gwibber Autostart deaktivieren #
+#gconftool-2 -s /apps/gwibber/autostart --type=bool false
+
+# Bildschirmschoner auf auf Zufall setzen #
+#gconftool-2 -s /apps/gnome-screensaver/mode --type=string random
+#gconftool-2 -s /apps/gnome-screensaver/themes --type=list --list-type=string '[screensavers-cosmos-slideshow,screensavers-voronoi,screensavers-topblock,screensavers-timetunnel,screensavers-tangram,screensavers-superquadrics,screensavers-stonerview,screensavers-starwars,screensavers-stairs,screensavers-sproingies,screensavers-spheremonics,screensavers-skytentacles,screensavers-sierpinski3d,screensavers-footlogo-floaters,screensavers-sballs,screensavers-rubik,screensavers-queens,screensavers-pulsar,screensavers-providence,screensavers-polytopes,screensavers-polyhedra,screensavers-pipes,screensavers-pinion,screensavers-photopile,screensavers-noof,screensavers-morph3d,screensavers-molecule,screensavers-moebiusgears,screensavers-moebius,screensavers-mirrorblob,screensavers-menger,screensavers-lockward,screensavers-lavalite,screensavers-lament,screensavers-klein,screensavers-juggler3d,screensavers-jigsaw,screensavers-jigglypuff,screensavers-hypnowheel,screensavers-hypertorus,screensavers-gltext,screensavers-glsnake,screensavers-glslideshow,screensavers-glschool,screensavers-glplanet,screensavers-glmatrix,screensavers-glknots,screensavers-glhanoi,screensavers-gleidescope,screensavers-glcells,screensavers-glblur,screensavers-gflux,screensavers-gears,screensavers-fuzzyflakes,screensavers-flyingtoasters,screensavers-flurry,screensavers-fliptext,screensavers-flipscreen3d,screensavers-flipflop,screensavers-fiberlamp,screensavers-extrusion,screensavers-engine,screensavers-endgame,screensavers-dangerball,screensavers-cubicgrid,screensavers-cubestorm,screensavers-cubenetic,screensavers-cube21,screensavers-crackberg,screensavers-circuit,screensavers-carousel,screensavers-cage,screensavers-bubble3d,screensavers-boxed,screensavers-bouncingcow,screensavers-boing,screensavers-blocktube,screensavers-blinkbox,screensavers-personal-slideshow,screensavers-atunnel,screensavers-atlantis,screensavers-antspotlight,screensavers-antmaze,screensavers-antinspect]'
+
+# Icon-Set
+#gconftool-2 -s /desktop/gnome/interface/icon_theme --type=string gnome-wise
+#sudo cp /usr/share/icons/hicolor/scalable/apps/nautilus.svg /usr/share/icons/gnome-wise/scalable/apps/system-file-manager.svg
+
+# Pidgin Statusicon #
+#mkdir ~/.purple
+#cp -v ~/ownosinstall/prefs/pidgin/prefs.xml ~/.purple/
+
+# Rhythmbox #
+#sudo sh -c "echo '
+### Rhythmbox-Radio-Browser' >> /etc/apt/sources.list"
+#sudo sh -c "echo 'deb http://ppa.launchpad.net/segler-alex/ppa/ubuntu lucid main'>> /etc/apt/sources.list" 
+#sudo apt-key adv --keyserver keyserver.ubuntu.com --recv-keys 299F9883
+#sudo apt-get update
+#sudo apt-get -y install rhythmbox-radio-browser --force-yes
+#sudo sed -i 's"deb http://ppa.launchpad.net/segler"#deb http://ppa.launchpad.net/segler"g' /etc/apt/sources.list
+#gconftool-2 -s /apps/rhythmbox/plugins/jamendo/active --type=bool false
+#gconftool-2 -s /apps/rhythmbox/plugins/magnatune/active --type=bool false
+#gconftool-2 -s /apps/rhythmbox/plugins/lyrics/active --type=bool true
+#gconftool-2 -s /apps/rhythmbox/plugins/lyrics/active --type=bool true
+#gconftool-2 -s /apps/rhythmbox/plugins/lyrics/engines --type=list --list-type=string '[astraweb.com,lyrc.com.ar,lyricwiki.org,winampcn.com]'
+#gconftool-2 -s /apps/rhythmbox/plugins/status-icon/window-visible --type=bool true
+
+
+# Bildbetrachter #
+##gconftool-2 --load ~/ownosinstall/prefs/eog-preferences
+#gconftool-2 -s /apps/eog/plugins/active_plugins --type=list --list-type=string '[fullscreen,reload,statusbar-date]'
+#mkdir ~/.gnome2/eog/
+#gconftool-2 -s /apps/eog/ui/image_collection_resizable --type=bool  true
+#cp -vr ~/ownosinstall/prefs/evince ~/.gnome2/
+##cp -vr ~/ownosinstall/prefs/eog ~/ownosinstall/prefs/
+
+# Arbeitsflaechenumschalter Mausrad auf Schreibtisch #
+#gconftool-2 -s /apps/compiz/plugins/vpswitch/allscreens/options/next_button --type=string Button4
+#gconftool-2 -s /apps/compiz/plugins/vpswitch/allscreens/options/prev_button --type=string Button5
+
+# Fenster verschieben von [Alt] auf [Super]#
+#gconftool-2 -s /apps/metacity/general/mouse_button_modifier --type=string "<Super>"
+
+# Ecke für Desktopeffekt Scale #
+#gconftool-2 --load ~/ownosinstall/prefs/compiz/ezoom
+#gconftool-2 --load ~/ownosinstall/prefs/compiz/scale
+
+# Sättigung, Helligkeit und Tranzparenz #
+#gconftool-2 -s /apps/compiz/plugins/obs/allscreens/options/saturation_decrease_button --type=string "<Control><Super>Button5"
+#gconftool-2 -s /apps/compiz/plugins/obs/allscreens/options/saturation_increase_button --type=string "<Control><Super>Button4"
+#gconftool-2 -s /apps/compiz/plugins/obs/allscreens/options/brightness_decrease_button --type=string "<Shift><Super>Button5"
+#gconftool-2 -s /apps/compiz/plugins/obs/allscreens/options/brightness_increase_button --type=string "<Shift><Super>Button4"
+#gconftool-2 -s /apps/compiz/plugins/obs/allscreens/options/opacity_decrease_button --type=string "<Alt><Super>Button5"
+#gconftool-2 -s /apps/compiz/plugins/obs/allscreens/options/opacity_increase_button --type=string "<Alt><Super>Button4"
+
+# Tastenkombinationen #
+#gconftool-2 -s /apps/gnome_settings_daemon/keybindings/search --type=string "<Mod4>f"
+
+
+#deb http://ppa.launchpad.net/moonlight-team/pinta/ubuntu karmic main
+#sudo apt-key adv --recv-keys --keyserver keyserver.ubuntu.com B98E84D3  
+
+#sudo apt-get -y install fortunes fortunes-de
+
+# Nautilus-Adressleiste - Eingabefeld
+#gconftool-2 --type Boolean --set /apps/nautilus/preferences/always_use_location_entry True
+# Nautilus-Adressleiste - Navigationssknoepfen
+#gconftool-2 --type Boolean --set /apps/nautilus/preferences/always_use_location_entry False
+
