@@ -67,21 +67,23 @@ export ENDCOLOR="\033[0m"
 
 # check: ob dialog / mktemp bereits installiert ist
 ls -al /usr/bin/dialog &>/dev/null 2>&1
-if ! kommando ; then
+if ! command ; then
 # wenn nicht, wird dies installiert
 	sudo aptitude install dialog
 fi
-ls -al /usr/bin/dialog &>/dev/null 2>&1
-if ! kommando ; then
+ls -al /bin/mktemp &>/dev/null 2>&1
+if ! command ; then
 # wenn nicht, wird dies installiert
 	sudo aptitude install mktemp
 fi
+
 
 function chooseDialog {
 DIALOGAPP=`which dialog 2> /dev/null` \
 || DIALOGAPP=`which whiptail 2> /dev/null`
 }
 
+# Funktion um die Groesse von 
 function setDialogDimensions {
 test -x /usr/bin/tty && CONSOLE=`/usr/bin/tty`
 test -z "$CONSOLE" && CONSOLE=/dev/console
@@ -123,36 +125,40 @@ if [ "$DIALOG_H" -gt "$MAX_H" ]; then
 fi
 }
 
-function msgboxDialog {
-chooseDialog
-IN="${1}"
-setDialogDimensions "${IN}"
-echo "dims $DIALOG_W $DIALOG_H"
-$DIALOGAPP --backtitle "DIALOGBACKTITLE" --title "DIALOGTITLE" --msgbox "${IN}"  $DIALOG_H $DIALOG_W
-}
-
-#FEHLER
-
 # check: ob Ubuntu Lucid installiert ist
 if [ "lucid" = `lsb_release -cs` ]; then
 # check: ob Ubuntu in 32 oder 64-Bit installiert ist
+	chooseDialog
+	TITLE="Ubuntu 10.04"
+	MESSAGE="\nUbuntu 10.04 Lucid Lynx - OK"   
+	setDialogDimensions "${MESSAGE}"
+	dialog --title " `echo -e "$TITLE"`" --infobox "`echo -e "$MESSAGE"`"  $DIALOG_H $DIALOG_W
 	if [ "i686" = `uname -m` ]; then
-		dialog --title " Ubuntu 10.04 " --infobox "\nUbuntu 10.04 Lucid Lynx - OK" 10 50
 		ARCH=i386
 	elif [ "x86_64" = `uname -m` ]; then
-		dialog --title " Ubuntu 10.04 " --infobox "\nDu nutzt Ubuntu 10.04 Lucid Lynx - Alles OK" 10 50
 		ARCH=amd64
 # ansonsten wird das Skript beenedet (!= 32 bzw. 64-Bit System)
 	else
-		dialog --title " ERROR: Du nutzt nicht Ubuntu 10.04 " --infobox "\nDu nutzt nicht Ubuntu 10.04 Lucid Lynx 32 oder 64-Bit" 10 50
+		chooseDialog
+		TITLE="ERROR: Du nutzt nicht Ubuntu 10.04"
+		MESSAGE="\nDu nutzt nicht Ubuntu 10.04 Lucid Lynx 32 oder 64-Bit"   
+		setDialogDimensions "${MESSAGE}"
+		dialog --title "`echo -e "$TITLE"`" --msgbox "`echo -e "$MESSAGE"`" $DIALOG_H $DIALOG_W
        		exit
 	fi
 # ansonsten wird das Skript beendet (!= lucid)
 else
-	dialog --title " ERROR: Du nutzt nicht Ubuntu 10.04 " --infobox "\nDu nutzt nicht Ubuntu 10.04 Lucid Lynx 32 oder 64-Bit" 10 50
-	MESSAGE=" Ubuntu Update 10.04 Lucid auf `hostname` installieren? "
+	chooseDialog
+	TITLE="ERROR: Du nutzt nicht Ubuntu 10.04"
+	MESSAGE="\nDu nutzt nicht Ubuntu 10.04 Lucid Lynx 32 oder 64-Bit"   
+	setDialogDimensions "${MESSAGE}"
+	dialog --title "`echo -e "$TITLE"`" --infobox "\n`echo -e "$MESSAGE"`"  $DIALOG_H $DIALOG_W
 # wenn gewuenscht, wird das Update auf Version 10.04 installiert
-        dialog --title " Ubuntu 10.04 Lucid " --yesno "\n`echo -e "$MESSAGE"`" 10 50
+	chooseDialog
+	TITLE="Ubuntu 10.04 Lucid"
+	MESSAGE="Ubuntu Update 10.04 Lucid auf `hostname` installieren? "
+	setDialogDimensions "${MESSAGE}"
+        dialog --title "`echo -e "$TITLE"`" --yesno "\n`echo -e "$MESSAGE"`" $DIALOG_H $DIALOG_W
         RESULT1=$?
         if [ $RESULT1 = "0" ]; then
 		apt-get update && aptitude upgrade
@@ -165,21 +171,26 @@ fi
 
 # check: ob du die passenden Rechte hast (!= root)
 if [ $USER != "root" ]; then
-	dialog --title " ERROR: Du bist nicht root " --infobox "\nDu bist nicht root, du bist '$USER'!\n\n (versuche es mal mit \"sudo bash $0\")" 10 50
+	chooseDialog
+	TITLE="ERROR: Du bist nicht root"
+	MESSAGE="\nDu bist nicht root, du bist '$USER'!\n\n (versuche es mal mit \"sudo bash $0\")"
+	setDialogDimensions "${MESSAGE}"
+	dialog --colors --title "`echo -e "$TITLE"`" --msgbox "\n`echo -e "$MESSAGE"`" $DIALOG_H $DIALOG_W
         exit
 fi
 
 # check: ob Updates anstehen
-SUBJECT="[`hostname`] - Update Hinweis"
-COUNT=`apt-get -s upgrade | grep -c "Inst"`    
+COUNT=`apt-get -s upgrade | grep -c "Inst"`
+chooseDialog
+TITLE="[`hostname`] - Update Hinweis"
 MESSAGE="SYSTEMMELDUNG:\nAuf `hostname` sind $COUNT neue Updates vorhanden!"
+setDialogDimensions "${MESSAGE}"
 # wenn mehr als ein Update ansteht, dann wird eine Meldung uber dessen Anzahl angezeigt 
 if [ $COUNT -gt 0 ]; then
-   	dialog --title " $SUBJECT " --msgbox "\n`echo -e "$MESSAGE"`" 10 50
+   	dialog --title " $TITLE " --msgbox "\n`echo -e "$MESSAGE"`" $DIALOG_H $DIALOG_W
 fi
 
 # ein Backup der aktuellen sources.list wird erstellt
-#
 # wenn das Verzeichnis bereits angelegt ist
 if [ -d $BACKUP ] ; then
 # fuer alle Dateien, im Backup-Verzeichnis
@@ -193,8 +204,11 @@ if [ -d $BACKUP ] ; then
 else
 # ansonsten wird erst-einmal das Backup-Verzeichnis angelegt
 	mkdir $BACKUP
-	MESSAGE="Backup-Verzeichnis wurde angelegt - $BACKUP"    
-	dialog --title " Backup-Verzeichnis " --msgbox "\n`echo -e "$MESSAGE"`" 10 50
+	chooseDialog
+	TITLE="Backup-Verzeichnis"
+	MESSAGE="Backup-Verzeichnis wurde angelegt - $BACKUP"
+	setDialogDimensions "${MESSAGE}"
+	dialog --title " $TITLE " --msgbox "\n`echo -e "$MESSAGE"`" $DIALOG_H $DIALOG_W
 fi
 # wenn das Verzeichnis bereits angelegt ist
 if [ -d $BACKUP_OLD ]; then
@@ -205,21 +219,30 @@ if [ -d $BACKUP_OLD ]; then
 else
 # ansonsten wird erst-einmal das Backup_old-Verzeichnis angelegt
 	mkdir $BACKUP_OLD
+	chooseDialog
+	TITLE="Backup-Verzeichnis"
 	MESSAGE="Backup_old-Verzeichnis wurde angelegt - $BACKUP_OLD"    
-	dialog --title " Backup-Verzeichnis " --msgbox "\n`echo -e "$MESSAGE"`" 10 50
+	setDialogDimensions "${MESSAGE}"
+	dialog --title " $TITLE " --msgbox "\n`echo -e "$MESSAGE"`" $DIALOG_H $DIALOG_W
 fi
 # und die sources.list mit dem aktuellen Datum gespeichert
 BAK=sources.old.$(date "+%y%m%d-%H%M")
 cp -p $SOURCES $BACKUP/$BAK
-MESSAGE="Backup deiner sources.list wurde angelegt - $BACKUP/$BAK"    
-dialog --title " Backup-Verzeichnis " --msgbox "\n`echo -e "$MESSAGE"`" 10 50
+chooseDialog
+TITLE="Backup-sources.list"
+MESSAGE="Backup deiner sources.list wurde angelegt - $BACKUP/$BAK"
+setDialogDimensions "${MESSAGE}"
+dialog --title " $TITLE " --msgbox "\n`echo -e "$MESSAGE"`" $DIALOG_H $DIALOG_W
 
 # ggf. die sources von sources.list.d migrieren
 #
 # wenn das Verzeichnis bereits angelegt ist und eine passende Datei vorhanden ist
 if [ -d $SOURCESD ] && [ -f $SOURCESD/*.list ] ; then
+	chooseDialog
+	TITLE="$SOURCESD migrieren?"
 	MESSAGE="Moechtest du die Repositories welche in einem Unterverzeichnis liegen, in deine sources.list migrieren?"    
-	dialog --title " $SOURCESD migrieren? " --yesno "\n`echo -e "$MESSAGE"`" 10 50 
+	setDialogDimensions "${MESSAGE}"
+	dialog --title  " $TITLE "  --yesno "\n`echo -e "$MESSAGE"`" $DIALOG_H $DIALOG_W
 	RESULT1=$?
 	if [ $RESULT1 = "0" ]; then
 # Kommentare und Leerzeilen werden entfernt 
@@ -236,7 +259,11 @@ if [ -d $SOURCESD ] && [ -f $SOURCESD/*.list ] ; then
 		for I in `seq 0 ${#ARRAY[@]}`; do
 			echo "${ARRAY[$I]}" >> ${TMPFILE}
 		done
-		dialog --title " Repositories migrieren " --yesno "Möchtest du die Dateien wirklich migrieren?" 10 75
+		chooseDialog
+		TITLE="Repositories migrieren"
+		MESSAGE="Moechtest du die Dateien wirklich migrieren?"
+		setDialogDimensions "${MESSAGE}"
+		dialog --title " $TITLE " --yesno "\n`echo -e "$MESSAGE"`" $DIALOG_H $DIALOG_W	
 		RESULT1=$?
 		if [ $RESULT1 = "0" ]; then
 # Ergebnis wird nun in die sources.list geschrieben und es wird aufgeraeumt
@@ -251,7 +278,10 @@ sleep 1
 for LOCK in synaptic update-manager software-center apt-get dpkg aptitude ; do
 # wenn ein Update-Manager bereits laeft, dann wird das Skript beendet
 	if ps -U root -u root u | grep $LOCK | grep -v grep > /dev/null; then
-		MESSAGE="SYSTEMMELDUNG:\nDas Skript wird nicht laufen, wenn du $LOCK nicht vorher beendest!"    
+		chooseDialog
+		TITLE="ERROR: $LOCK laeuft bereits"
+		MESSAGE="SYSTEMMELDUNG:\nDas Skript wird nicht laufen, wenn du $LOCK nicht vorher beendest!"
+		setDialogDimensions "${MESSAGE}"
    		dialog --title " ERROR: $LOCK laeuft bereits " --msgbox "\n`echo -e "$MESSAGE"`" 10 50
         	exit
 	fi
@@ -270,11 +300,19 @@ function testConnection() {
 TESTCONNECTION=`wget --tries=3 --timeout=10 www.google.de -O $TMPFILE &>/dev/null 2>&1`
 # wenn keine Verbindung hergestellt werden konnte, dann wird eine entsprechende Meldung angezeigt
 if [ $? != 0 ]; then
-	dialog --title " INFO: Internet-Verbindung - Problem " --msgbox "\nEs besteht momentan keine Internet-Verbindung, es koennen einige Funktionen des Skriptes daher nicht genutzt werden." 10 50
+	chooseDialog
+	TITLE="INFO: Internet-Verbindung - Problem"
+	MESSAGE="\nEs besteht momentan keine Internet-Verbindung, es koennen einige Funktionen des Skriptes daher nicht genutzt werden."
+	setDialogDimensions "${MESSAGE}"
+	dialog --title " $TITLE " --msgbox "\n`echo -e "$MESSAGE"`" $DIALOG_H $DIALOG_W
 	export INTERNET="nein"
 else
 # ansonsten ist alles OK
-	dialog --title " INFO: Internet-Verbindung - OK " --infobox "\nEs besteht eine Internet-Verbindung." 10 50
+	chooseDialog
+	TITLE="INFO: Internet-Verbindung - OK"
+	MESSAGE="\nEs besteht eine Internet-Verbindung."
+	setDialogDimensions "${MESSAGE}"
+	dialog --title " $TITLE " --infobox "\n`echo -e "$MESSAGE"`" $DIALOG_H $DIALOG_W
 	export INTERNET="ja"
 fi
 }
@@ -292,8 +330,12 @@ B="deb http://ppa.launchpad.net/$1/ubuntu lucid main"
 C="deb-src http://ppa.launchpad.net/$1/ubuntu lucid main" 
 echo -e "$A" "\n$B" "\n$C" >> $SOURCES
 }
-dialog --backtitle "Extra-Repositories" \
-	--checklist "Extra-Repositories: fuer Ubuntu 10.04" 80 80 15 \
+chooseDialog
+TITLE="Extra-Repositories"
+MESSAGE="Extra-Repositories: fuer Ubuntu 10.04"
+setDialogDimensions "${MESSAGE}"
+dialog --backtitle  " $TITLE " \
+	--checklist "\n`echo -e "$MESSAGE"`" 120 80 60 \
 	01 "Medibuntu" off\
 	02 "Ailurus - Ubuntu Tweak Tool + Erklaerung" off\
 	03 "Avant - Window Navigator" off\
@@ -312,15 +354,19 @@ dialog --backtitle "Extra-Repositories" \
 	16 "GetDep - viele neue Programm Updates" off\
 	17 "VirtualBox - Virtuelle PCs installieren" off\
 	18 "Swiftfox - optimierte Firefox-Version" off\
-	19 "VLC Media Player" off\
-	20 "Pidgin" off\
+	19 "VLC - Media Player" off\
+	20 "Pidgin - Chat-Client" off\
 	21 "gpm - Mauszeigers in der Systemkonsole" off\
 	22 "Claws Mail - schneller Mail-Client" off\
-	23 "Google-Gadgets" off 2>$TMPFILE
+	23 "Skype - VoIP-Software" off 2>$TMPFILE
 if [ ${?} -ne 0 ]; then return; fi
 read RESULT <$TMPFILE
 ARRAY=($RESULT)
-dialog --title " Extra-Repositories " --yesno "Moechtest du die Extra-Repositories wirklich eintragen?" 6 44 
+chooseDialog
+TITLE="Extra-Repositories"
+MESSAGE="Moechtest du die Extra-Repositories wirklich eintragen?"
+setDialogDimensions "${MESSAGE}"
+dialog --title " $TITLE " --yesno "\n`echo -e "$MESSAGE"`" $DIALOG_H $DIALOG_W
 RESULT1=$?
 if [ $RESULT1 = "1" ]; then return; fi
 for I in ${ARRAY[@]}; do
@@ -335,11 +381,19 @@ for I in ${ARRAY[@]}; do
 			D="deb http://packages.medibuntu.org/ lucid free non-free" 
 			E="deb-src http://packages.medibuntu.org/ lucid free non-free" 
 			echo -e "$A" "\n$B" "\n$C" "\n$D" "\n$E" >> $SOURCES
-			sudo apt-get update && sudo aptitude install libdvdcss2 ubuntu-restricted-extras
-			if [ $ARCH = "i386" ]; then
-				sudo aptitude install w32codecs
-			elif [ $ARCH = "amd64" ]; then
-				sudo aptitude install w64codecs
+			chooseDialog
+			TITLE="codecs installieren"
+			MESSAGE="Moechtest du das codecs-Pakete von medibuntu installieren?"
+			setDialogDimensions "${MESSAGE}"
+			dialog --title " $TITLE " --yesno "\n`echo -e "$MESSAGE"`" $DIALOG_H $DIALOG_W	
+			RESULT1=$?
+			if [ $RESULT1 = "0" ]; then
+				sudo apt-get update && sudo aptitude install libdvdcss2 ubuntu-restricted-extras
+				if [ $ARCH = "i386" ]; then
+					sudo aptitude install w32codecs
+				elif [ $ARCH = "amd64" ]; then
+					sudo aptitude install w64codecs
+				fi
 			fi
 		;;
 		\"02\")
@@ -347,14 +401,30 @@ for I in ${ARRAY[@]}; do
 			cp -p $TMPFILE $SOURCES
 			launchpad "ailurus/ppa" "Ailurus"
 			sudo apt-key adv --recv-keys --keyserver keyserver.ubuntu.com 9A6FE242
-			sudo apt-get update && sudo aptitude install ailurus
+			chooseDialog
+			TITLE="Ailurus installieren"
+			MESSAGE="Moechtest du auch das Paket (Ailurus) installieren?"
+			setDialogDimensions "${MESSAGE}"
+			dialog --title " $TITLE " --yesno "\n`echo -e "$MESSAGE"`" $DIALOG_H $DIALOG_W	
+			RESULT1=$?
+			if [ $RESULT1 = "0" ]; then
+				sudo apt-get update && sudo aptitude install ailurus
+			fi
 		;;
 		\"03\")
 			grep -iv awn-testing $SOURCES > $TMPFILE
 			cp -p $TMPFILE $SOURCES
 			launchpad "awn-testing/ppa" "AWN-Testing"
 			sudo apt-key adv --recv-keys --keyserver keyserver.ubuntu.com BF810CD5
-			sudo apt-get update && sudo aptitude install avant-window-navigator awn-applets-c-extras awn-applets-python-extras python-awn-extras	
+			chooseDialog
+			TITLE="AWN installieren"
+			MESSAGE="Moechtest du auch das Paket (AWN) installieren?"
+			setDialogDimensions "${MESSAGE}"
+			dialog --title " $TITLE " --yesno "\n`echo -e "$MESSAGE"`" $DIALOG_H $DIALOG_W	
+			RESULT1=$?
+			if [ $RESULT1 = "0" ]; then
+				sudo apt-get update && sudo aptitude install avant-window-navigator awn-applets-c-extras awn-applets-python-extras python-awn-extras
+			fi
 		;;
 		\"04\")
 			grep -iv nautilus-elementary $SOURCES > $TMPFILE
@@ -365,51 +435,106 @@ for I in ${ARRAY[@]}; do
 			launchpad "elementaryart/elementarydesktop" "ElementaryArt"
 			sudo apt-key adv --recv-keys --keyserver keyserver.ubuntu.com 2E206FF0
 			sudo apt-key adv --recv-keys --keyserver keyserver.ubuntu.com FC5D50C5
-			sudo apt-get update && sudo aptitude upgrade nautilus
+			chooseDialog
+			TITLE="Nautilus-Elementary installieren"
+			MESSAGE="Moechtest du auch das Paket (Nautilus-Elementary) installieren?"
+			setDialogDimensions "${MESSAGE}"
+			dialog --title " $TITLE " --yesno "\n`echo -e "$MESSAGE"`" $DIALOG_H $DIALOG_W	
+			RESULT1=$?
+			if [ $RESULT1 = "0" ]; then
+				sudo apt-get update && sudo aptitude upgrade nautilus
+			fi
 		;;
 		\"05\")
 			grep -iv gloobus $SOURCES > $TMPFILE
 			cp -p $TMPFILE $SOURCES
 			launchpad "gloobus-dev/gloobus-preview" "Gloobus"
 			sudo apt-key adv --recv-keys --keyserver keyserver.ubuntu.com EB13C954
-			sudo apt-get update && sudo aptitude install gloobus-preview
+			chooseDialog
+			TITLE="Gloobus-Preview installieren"
+			MESSAGE="Moechtest du auch das Paket (Gloobus-Preview) installieren?"
+			setDialogDimensions "${MESSAGE}"
+			dialog --title " $TITLE " --yesno "\n`echo -e "$MESSAGE"`" $DIALOG_H $DIALOG_W	
+			RESULT1=$?
+			if [ $RESULT1 = "0" ]; then
+				sudo apt-get update && sudo aptitude install gloobus-preview
+			fi
 		;;
 		\"06\")
 			grep -iv compiz $SOURCES > $TMPFILE
 			cp -p $TMPFILE $SOURCES
 			launchpad "compiz/ppa" "Compiz"
 			sudo apt-key adv --recv-keys --keyserver keyserver.ubuntu.com 42C24D89
-			sudo apt-get update && sudo aptitude upgrade compiz 
-			sudo aptitude install compizconfig-settings-manager
+			chooseDialog
+			TITLE="Compiz updaten"
+			MESSAGE="Moechtest du auch das Paket (Compiz) updaten?"
+			setDialogDimensions "${MESSAGE}"
+			dialog --title " $TITLE " --yesno "\n`echo -e "$MESSAGE"`" $DIALOG_H $DIALOG_W	
+			RESULT1=$?
+			if [ $RESULT1 = "0" ]; then
+				sudo apt-get update && sudo aptitude upgrade compiz 
+				sudo aptitude install compizconfig-settings-manager
+			fi
 		;;
 		\"07\")
 			grep -iv chromium $SOURCES > $TMPFILE
 			cp -p $TMPFILE $SOURCES
 			launchpad "chromium-daily/ppa" "Chromium"
 			sudo apt-key adv --recv-keys --keyserver keyserver.ubuntu.com 4E5E17B5
-			sudo apt-get update && sudo aptitude install chromium-browser chromium-codecs-ffmpeg 
+			chooseDialog
+			TITLE="Chromium installieren"
+			MESSAGE="Moechtest du auch das Paket (Chromium) installieren?"
+			setDialogDimensions "${MESSAGE}"
+			dialog --title " $TITLE " --yesno "\n`echo -e "$MESSAGE"`" $DIALOG_H $DIALOG_W	
+			RESULT1=$?
+			if [ $RESULT1 = "0" ]; then
+				sudo apt-get update && sudo aptitude install chromium-browser chromium-codecs-ffmpeg 
+			fi
 		;;
 		\"08\")
 			grep -iv globalmenu $SOURCES > $TMPFILE
 			cp -p $TMPFILE $SOURCES
 			launchpad "globalmenu-team/ppa" "GlobalMenu"
 			sudo apt-key adv --recv-keys --keyserver keyserver.ubuntu.com DA6DEEAA
-			sudo apt-get update && sudo aptitude install gnome-globalmenu
+			chooseDialog
+			TITLE="GlobalMenu installieren"
+			MESSAGE="Moechtest du auch das Paket (GlobalMenu) installieren?"
+			setDialogDimensions "${MESSAGE}"
+			dialog --title " $TITLE " --yesno "\n`echo -e "$MESSAGE"`" $DIALOG_H $DIALOG_W	
+			RESULT1=$?
+			if [ $RESULT1 = "0" ]; then
+				sudo apt-get update && sudo aptitude install gnome-globalmenu
+			fi
 		;;
 		\"09\")
 			grep -iv openoffice $SOURCES > $TMPFILE
 			cp -p $TMPFILE $SOURCES
 			launchpad "openoffice-pkgs" "OpenOffice"
 			sudo apt-key adv --recv-keys --keyserver keyserver.ubuntu.com 247D1CFF
-			sudo apt-get update && sudo aptitude upgrade openoffice.org
+			chooseDialog
+			TITLE="OpenOffice updaten"
+			MESSAGE="Moechtest du auch das Paket (OpenOffice) updaten?"
+			setDialogDimensions "${MESSAGE}"
+			dialog --title " $TITLE " --yesno "\n`echo -e "$MESSAGE"`" $DIALOG_H $DIALOG_W	
+			RESULT1=$?
+			if [ $RESULT1 = "0" ]; then
+				sudo apt-get update && sudo aptitude upgrade openoffice.org
+			fi
 		;;
 		\"10\")
 			grep -iv do-core $SOURCES > $TMPFILE
 			cp -p $TMPFILE $SOURCES
 			launchpad "do-core/ppa" "do-core - Gnome-Do"
 			sudo apt-key adv --recv-keys --keyserver keyserver.ubuntu.com 77558DD0
-			sudo apt-get update && sudo aptitude upgrade openoffice.org
-			sudo apt-get update && sudo aptitude install gnome-do
+			chooseDialog
+			TITLE="Gnome-Do installieren"
+			MESSAGE="Moechtest du auch das Paket (Gnome-Do) installieren?"
+			setDialogDimensions "${MESSAGE}"
+			dialog --title " $TITLE " --yesno "\n`echo -e "$MESSAGE"`" $DIALOG_H $DIALOG_W	
+			RESULT1=$?
+			if [ $RESULT1 = "0" ]; then
+				sudo apt-get update && sudo aptitude install gnome-do
+			fi
 		;;
 		\"11\")
 			grep -iv tualatrix $SOURCES > $TMPFILE
@@ -420,55 +545,87 @@ for I in ${ARRAY[@]}; do
 			launchpad "ubuntu-tweak-testing/ppa" "Ubuntu-Tweak"
 			sudo apt-key adv --keyserver keyserver.ubuntu.com --recv-keys 0624A220
 			sudo apt-key adv --keyserver keyserver.ubuntu.com --recv-keys E260F5B0 
-			sudo apt-get update && sudo aptitude install ubuntu-tweak
+			chooseDialog
+			TITLE="Ubuntu-Tweak installieren"
+			MESSAGE="Moechtest du auch das Paket (Ubuntu-Tweak) installieren?"
+			setDialogDimensions "${MESSAGE}"
+			dialog --title " $TITLE " --yesno "\n`echo -e "$MESSAGE"`" $DIALOG_H $DIALOG_W	
+			RESULT1=$?
+			if [ $RESULT1 = "0" ]; then
+				sudo apt-get update && sudo aptitude install ubuntu-tweak
+			fi
 		;;
 		\"12\")
 			grep -iv ubuntu-wine $SOURCES > $TMPFILE
 			cp -p $TMPFILE $SOURCES
 			launchpad "ubuntu-wine/ppa" "Ubuntu-Wine"
 			sudo apt-key adv --keyserver keyserver.ubuntu.com --recv-keys F9CB8DB0
-			sudo apt-get update && sudo aptitude install wine1.2
+			chooseDialog
+			TITLE="Wine installieren"
+			MESSAGE="Moechtest du auch das Paket (Wine) installieren?"
+			setDialogDimensions "${MESSAGE}"
+			dialog --title " $TITLE " --yesno "\n`echo -e "$MESSAGE"`" $DIALOG_H $DIALOG_W	
+			RESULT1=$?
+			if [ $RESULT1 = "0" ]; then
+				sudo apt-get update && sudo aptitude install wine1.2
+			fi
 		;;
 		\"13\")
 			grep -iv x-updates $SOURCES > $TMPFILE
 			cp -p $TMPFILE $SOURCES
 			launchpad "ubuntu-x-swat/x-updates" "Ubuntu X-Updates"
 			sudo apt-key adv --keyserver keyserver.ubuntu.com --recv-keys AF1CDFA9
-			sudo apt-get update && sudo aptitude upgrade
+			chooseDialog
+			TITLE="X-Server update"
+			MESSAGE="Moechtest du auch das Paket (X-Server) updaten?"
+			setDialogDimensions "${MESSAGE}"
+			dialog --title " $TITLE " --yesno "\n`echo -e "$MESSAGE"`" $DIALOG_H $DIALOG_W	
+			RESULT1=$?
+			if [ $RESULT1 = "0" ]; then
+				sudo apt-get update && sudo aptitude upgrade
+			fi
 		;;
 		\"14\")
 			grep -iv debfx $SOURCES > $TMPFILE
 			cp -p $TMPFILE $SOURCES
 			launchpad "debfx/ppa" "debfx - Flash"
 			sudo apt-key adv --keyserver keyserver.ubuntu.com --recv-keys 62F1201A
-			pkill -9 firefox*
-			if [ $ARCH = "i386" ]; then
-				sudo apt-get remove -y --purge flashplugin-nonfree gnash gnash-common mozilla-plugin-gnash swfdec-mozilla libflashsupport nspluginwrapper flashplugin-installer
-				sudo rm -f /usr/lib/mozilla/plugins/*flash*
-				sudo rm -f ~/.mozilla/plugins/*flash*
-				sudo rm -f /usr/lib/firefox/plugins/*flash*
-				sudo rm -f /usr/lib/firefox-addons/plugins/*flash*
-				sudo rm -rfd /usr/lib/nspluginwrapper
-				sudo apt-get update && sudo aptitude install flashplugin-nonfree
-			elif [ $ARCH = "amd64" ]; then
-				sudo apt-get remove -y --purge flashplugin-nonfree gnash gnash-common mozilla-plugin-gnash swfdec-mozilla libflashsupport nspluginwrapper flashplugin-installer
-				sudo rm -f /usr/lib/mozilla/plugins/*flash*
-				sudo rm -f ~/.mozilla/plugins/*flash*
-				sudo rm -f /usr/lib/firefox/plugins/*flash*
-				sudo rm -f /usr/lib/firefox-addons/plugins/*flash*
-				sudo rm -rfd /usr/lib/nspluginwrapper
-				sudo apt-get install ia32-libs nspluginwrapper
-				sudo getlibs -p libcurl3
-				sudo getlibs -p libnss3-1d
-				sudo getlibs -p libnspr4-0d
-				wget http://fpdownload.macromedia.com/get/flashplayer/current/install_flash_player_10_linux.tar.gz
-				tar zxvf install_flash_player_10_linux.tar.gz
-				rm install_flash_player_10_linux.tar.gz
-				sudo cp install_flash_player_10_linux/libflashplayer.so /usr/lib/mozilla/plugins/
-				rm -rf ~/install_flash_player_10_linux/
-				sudo nspluginwrapper -i /usr/lib/mozilla/plugins/libflashplayer.so
-				sudo ln -sf /usr/lib/nspluginwrapper/plugins/npwrapper.libflashplayer.so /usr/lib/mozilla/plugins/
-				sudo ln -sf /usr/lib/nspluginwrapper/plugins/npwrapper.libflashplayer.so /usr/lib/firefox-addons/plugins/
+			chooseDialog
+			TITLE="flashplugin installieren"
+			MESSAGE="Moechtest du auch das Paket (flashplugin) installieren?"
+			setDialogDimensions "${MESSAGE}"
+			dialog --title " $TITLE " --yesno "\n`echo -e "$MESSAGE"`" $DIALOG_H $DIALOG_W	
+			RESULT1=$?
+			if [ $RESULT1 = "0" ]; then
+				pkill -9 firefox*
+				if [ $ARCH = "i386" ]; then
+					sudo apt-get remove -y --purge flashplugin-nonfree gnash gnash-common mozilla-plugin-gnash swfdec-mozilla libflashsupport nspluginwrapper flashplugin-installer
+					sudo rm -f /usr/lib/mozilla/plugins/*flash*
+					sudo rm -f ~/.mozilla/plugins/*flash*
+					sudo rm -f /usr/lib/firefox/plugins/*flash*
+					sudo rm -f /usr/lib/firefox-addons/plugins/*flash*
+					sudo rm -rfd /usr/lib/nspluginwrapper
+					sudo apt-get update && sudo aptitude install flashplugin-nonfree
+				elif [ $ARCH = "amd64" ]; then
+					sudo apt-get remove -y --purge flashplugin-nonfree gnash gnash-common mozilla-plugin-gnash swfdec-mozilla libflashsupport nspluginwrapper flashplugin-installer
+					sudo rm -f /usr/lib/mozilla/plugins/*flash*
+					sudo rm -f ~/.mozilla/plugins/*flash*
+					sudo rm -f /usr/lib/firefox/plugins/*flash*
+					sudo rm -f /usr/lib/firefox-addons/plugins/*flash*
+					sudo rm -rfd /usr/lib/nspluginwrapper
+					sudo apt-get install ia32-libs nspluginwrapper
+					sudo getlibs -p libcurl3
+					sudo getlibs -p libnss3-1d
+					sudo getlibs -p libnspr4-0d
+					wget http://fpdownload.macromedia.com/get/flashplayer/current/install_flash_player_10_linux.tar.gz
+					tar zxvf install_flash_player_10_linux.tar.gz
+					rm install_flash_player_10_linux.tar.gz
+					sudo cp install_flash_player_10_linux/libflashplayer.so /usr/lib/mozilla/plugins/
+					rm -rf ~/install_flash_player_10_linux/
+					sudo nspluginwrapper -i /usr/lib/mozilla/plugins/libflashplayer.so
+					sudo ln -sf /usr/lib/nspluginwrapper/plugins/npwrapper.libflashplayer.so /usr/lib/mozilla/plugins/
+					sudo ln -sf /usr/lib/nspluginwrapper/plugins/npwrapper.libflashplayer.so /usr/lib/firefox-addons/plugins/
+				fi
 			fi
 		;;
 		\"15\")
@@ -476,7 +633,15 @@ for I in ${ARRAY[@]}; do
 			cp -p $TMPFILE $SOURCES
 			launchpad "bisigi/ppa" "Bisigi - Ubuntu Themes"
 			sudo apt-key adv --keyserver keyserver.ubuntu.com --recv-keys 881574DE
-			sudo apt-get update && sudo aptitude install bisigi-themes community-themes
+			chooseDialog
+			TITLE="zusaetzliche Ubuntu Themes installieren"
+			MESSAGE="Moechtest du auch die Pakete installieren?"
+			setDialogDimensions "${MESSAGE}"
+			dialog --title " $TITLE " --yesno "\n`echo -e "$MESSAGE"`" $DIALOG_H $DIALOG_W	
+			RESULT1=$?
+			if [ $RESULT1 = "0" ]; then
+				sudo apt-get update && sudo aptitude install bisigi-themes community-themes
+			fi
 		;;
 		\"16\")
 			grep -iv getdeb $SOURCES > $TMPFILE
@@ -488,7 +653,15 @@ for I in ${ARRAY[@]}; do
 			E="deb-src http://archive.getdeb.net/ubuntu lucid-getdeb games"
 			echo -e "$A" "\n$B" "\n$C" "\n$D" "\n$E" >> $SOURCES
 			wget -q -O- http://archive.getdeb.net/getdeb-archive.key | sudo apt-key add -
-			sudo apt-get update && sudo aptitude upgrade
+			chooseDialog
+			TITLE="Update durchfuehren"
+			MESSAGE="Moechtest du das Update nun durchfuehren?"
+			setDialogDimensions "${MESSAGE}"
+			dialog --title " $TITLE " --yesno "\n`echo -e "$MESSAGE"`" $DIALOG_H $DIALOG_W	
+			RESULT1=$?
+			if [ $RESULT1 = "0" ]; then
+				sudo apt-get update && sudo aptitude -t lucid-getdeb upgrade
+			fi
 		;;   
 		\"17\")
 			grep -iv download.virtualbox $SOURCES > $TMPFILE
@@ -497,6 +670,15 @@ for I in ${ARRAY[@]}; do
 			B="deb http://download.virtualbox.org/virtualbox/debian lucid non-free" 
 			echo -e "$A" "\n$B" >> $SOURCES
 			wget -q http://download.virtualbox.org/virtualbox/debian/sun_vbox.asc -O- | sudo apt-key add -
+			chooseDialog
+			TITLE="VirtualBox installieren"
+			MESSAGE="Moechtest du auch das Paket (VirtualBox) installieren?"
+			setDialogDimensions "${MESSAGE}"
+			dialog --title " $TITLE " --yesno "\n`echo -e "$MESSAGE"`" $DIALOG_H $DIALOG_W	
+			RESULT1=$?
+			if [ $RESULT1 = "0" ]; then
+				sudo apt-get update && sudo aptitude install virtualbox-ose
+			fi
 		;;
 		\"18\")
 			grep -iv getswiftfox $SOURCES > $TMPFILE
@@ -504,54 +686,62 @@ for I in ${ARRAY[@]}; do
 			A="## Swiftfox (getswiftfox)" 
 			B="deb http://getswiftfox.com/builds/debian unstable non-free" 
 			echo -e "$A" "\n$B" >> $SOURCES
-			sudo apt-get update
-			dialog --backtitle "Swiftfox-Version" \
-				--radiolist "Ubuntu Version waehlen" 30 60 8 \
-				01 "Swiftfox-Athlon64 (AMD64 Hardware mit 64bit OS)" off\
-				02 "Swiftfox-Athlon64-32bit (AMD64 Hardware mit 32bit OS)" off\
-				03 "Swiftfox-Prescott (Intel Prescott oder neuer)" off\
-				04 "Swiftfox-i686 (aeltere AMD und Intel)" on 2>$TMPFILE
-			if [ ${?} -ne 0 ]; then return; fi
-			read RESULT <$TMPFILE
-			case $RESULT in
-    				01)
-					SWIFTFOX_VERSION="swiftfox-athlon64"	
-    				;;
-    				02)
-      					SWIFTFOX_VERSION="swiftfox-athlon64-32bit"
-   				;;
-  				03)
-					SWIFTFOX_VERSION="swiftfox-prescott"
-				;;
-				04)
-					SWIFTFOX_VERSION="swiftfox-i686"
-				;;
-				*)
-					SWIFTFOX_VERSION="FEHLER"
-				;;
-			esac
-			if [ $SWIFTFOX_VERSION = "FEHLER" ]; then
-				continue
-			else
-				dialog --title " Swiftfox Version waehlen " --yesno "Moechtest du wirklich '$SWIFTFOX_VERSION' installieren?" 6 44 
-				if [ $RESULT1 = "0" ]; then
-					case $RESULT in
-						01) 
-							sudo aptitude install $SWIFTFOX_VERSION
-	  					;;
-	  					02)
-							sudo aptitude install $SWIFTFOX_VERSION
-	  					;;
-	  					03)
-							sudo aptitude install $SWIFTFOX_VERSION
-	  					;;
-	  					04)
-							sudo aptitude install $SWIFTFOX_VERSION
-						;;
-          					*)
-						continue
-						;;
-					esac
+			chooseDialog
+			TITLE="Swiftfox installieren"
+			MESSAGE="Moechtest du auch das Paket (Swiftfox) installieren?"
+			setDialogDimensions "${MESSAGE}"
+			dialog --title " $TITLE " --yesno "\n`echo -e "$MESSAGE"`" $DIALOG_H $DIALOG_W	
+			RESULT1=$?
+			if [ $RESULT1 = "0" ]; then
+				sudo apt-get update
+				dialog --backtitle "Swiftfox-Version" \
+					--radiolist "Ubuntu Version waehlen" 120 80 60 \
+					01 "Swiftfox-Athlon64 (AMD64 Hardware mit 64bit OS)" off\
+					02 "Swiftfox-Athlon64-32bit (AMD64 Hardware mit 32bit OS)" off\
+					03 "Swiftfox-Prescott (Intel Prescott oder neuer)" off\
+					04 "Swiftfox-i686 (aeltere AMD und Intel)" on 2>$TMPFILE
+				if [ ${?} -ne 0 ]; then return; fi
+				read RESULT <$TMPFILE
+				case $RESULT in
+    					01)
+						SWIFTFOX_VERSION="swiftfox-athlon64"	
+    					;;
+    					02)
+      						SWIFTFOX_VERSION="swiftfox-athlon64-32bit"
+   					;;
+  					03)
+						SWIFTFOX_VERSION="swiftfox-prescott"
+					;;
+					04)
+						SWIFTFOX_VERSION="swiftfox-i686"
+					;;
+					*)
+						SWIFTFOX_VERSION="FEHLER"
+					;;
+				esac
+				if [ $SWIFTFOX_VERSION = "FEHLER" ]; then
+					continue
+				else
+					dialog --title " Swiftfox Version waehlen " --yesno "Moechtest du wirklich '$SWIFTFOX_VERSION' installieren?" 6 44 
+					if [ $RESULT1 = "0" ]; then
+						case $RESULT in
+							01) 
+								sudo aptitude install $SWIFTFOX_VERSION
+	  						;;
+	  						02)
+								sudo aptitude install $SWIFTFOX_VERSION
+	  						;;
+	  						03)
+								sudo aptitude install $SWIFTFOX_VERSION
+	  						;;
+	  						04)
+								sudo aptitude install $SWIFTFOX_VERSION
+							;;
+          						*)
+							continue
+							;;
+						esac
+					fi
 				fi
 			fi
 		;;
@@ -561,31 +751,75 @@ for I in ${ARRAY[@]}; do
  			echo "deb http://linux.dropbox.com/ubuntu lucid main" | sudo tee -a $SOURCES > /dev/null
 			echo "deb-src http://linux.dropbox.com/ubuntu lucid main" | sudo tee -a $SOURCES > /dev/null
 			sudo apt-key adv --recv-keys --keyserver keyserver.ubuntu.com 5044912E
-			sudo apt-get update && sudo aptitude install nautilus-dropbox
+			chooseDialog
+			TITLE="Dropbox installieren"
+			MESSAGE="Moechtest du auch das Paket (nautilus-dropbox) installieren?"
+			setDialogDimensions "${MESSAGE}"
+			dialog --title " $TITLE " --yesno "\n`echo -e "$MESSAGE"`" $DIALOG_H $DIALOG_W	
+			RESULT1=$?
+			if [ $RESULT1 = "0" ]; then
+				sudo apt-get update && sudo aptitude install nautilus-dropbox
+			fi
 		;;
         	\"20\")
         		grep -iv pidgin-developers $SOURCES > $TMPFILE
 			cp -p $TMPFILE $SOURCES
 			launchpad "pidgin-developers/ppa" "Pidgin-Developers"
 			sudo apt-key adv --recv-keys --keyserver keyserver.ubuntu.com A1F196A8
-			sudo apt-get update && sudo aptitude install pidgin pidgin-microblog pidgin-facebookchat
-			if [ `which skype` != "/usr/bin/skype" ]; then
-				sudo aptitude install pidgin-skype
+			chooseDialog
+			TITLE="Pidgin installieren"
+			MESSAGE="Moechtest du auch das Paket (Pidgin) installieren?"
+			setDialogDimensions "${MESSAGE}"
+			dialog --title " $TITLE " --yesno "\n`echo -e "$MESSAGE"`" $DIALOG_H $DIALOG_W	
+			RESULT1=$?
+			if [ $RESULT1 = "0" ]; then
+				sudo apt-get update && sudo aptitude install pidgin pidgin-microblog pidgin-facebookchat
+				ls -al /usr/bin/skype &>/dev/null 2>&1
+				if ! command ; then
+					sudo aptitude install pidgin-skype
+				fi
 			fi
         	;;
         	\"21\")
-			
-			sudo aptitude install gpm
+        		chooseDialog
+			TITLE="gpm installieren"
+			MESSAGE="Moechtest du auch das Paket (gpm) installieren?"
+			setDialogDimensions "${MESSAGE}"
+			dialog --title " $TITLE " --yesno "\n`echo -e "$MESSAGE"`" $DIALOG_H $DIALOG_W	
+			RESULT1=$?
+			if [ $RESULT1 = "0" ]; then
+				sudo aptitude install gpm
+			fi
 		;;
 		\"22\")
 			grep -iv claws-mail $SOURCES > $TMPFILE
 			cp -p $TMPFILE $SOURCES
 			launchpad "claws-mail/ppa" "Claws-Mail"
 			sudo apt-key adv --recv-keys --keyserver keyserver.ubuntu.com 5ED1D082
-			sudo apt-get update && sudo aptitude install claws-mail
+			chooseDialog
+			TITLE="Claws-Mail installieren"
+			MESSAGE="Moechtest du auch das Paket (claws-mail) installieren?"
+			setDialogDimensions "${MESSAGE}"
+			dialog --title " $TITLE " --yesno "\n`echo -e "$MESSAGE"`" $DIALOG_H $DIALOG_W	
+			RESULT1=$?
+			if [ $RESULT1 = "0" ]; then
+				sudo apt-get update && sudo aptitude install claws-mail
+			fi
 		;;
 		\"23\")
-			sudo aptitude install skype earcandy
+			grep -iv download.skype $SOURCES > $TMPFILE
+			cp -p $TMPFILE $SOURCES
+			echo "deb http://download.skype.com/linux/repos/debian/ stable non-free #Skype" | sudo tee -a $SOURCES > /dev/null
+			sudo apt-key adv --keyserver pgp.mit.edu --recv-keys 0xd66b746e
+			chooseDialog
+			TITLE="Skype installieren"
+			MESSAGE="Moechtest du auch das Paket (skype) installieren?"
+			setDialogDimensions "${MESSAGE}"
+			dialog --title " $TITLE " --yesno "\n`echo -e "$MESSAGE"`" $DIALOG_H $DIALOG_W	
+			RESULT1=$?
+			if [ $RESULT1 = "0" ]; then
+				sudo apt-get update && sudo aptitude install skype earcandy
+			fi
 		;;
 		*)
 			echo "Fehler?!?!"   
@@ -596,7 +830,7 @@ done
 
 function ubuntu_tweak() {
 dialog --backtitle "Ubuntu-Tweak" \
-	--checklist "Ubuntu-Tweak: fuer Ubuntu 10.04" 100 100 15 \
+	--checklist "Ubuntu-Tweak: fuer Ubuntu 10.04" 120 100 60 \
 	01 "Window Buttons nach rechts verschieben (New Style)" off\
 	02 "Reset: Window Buttons nach rechts verschieben (Karmic Style)" off\
 	03 "Aendere den Update Manager - auto Benachrichtigung aus (Jaunty)" off\
@@ -627,7 +861,11 @@ dialog --backtitle "Ubuntu-Tweak" \
 if [ ${?} -ne 0 ]; then return; fi
 read RESULT <$TMPFILE
 ARRAY=($RESULT)
-dialog --title " Tweak " --yesno "Moechtest du die Aenderungen wirklich durchfuehren?" 6 44 
+chooseDialog
+TITLE="Tweak"
+MESSAGE="Moechtest du die Aenderungen wirklich durchfuehren?"
+setDialogDimensions "${MESSAGE}"
+dialog --title " $TITLE " --yesno "\n`echo -e "$MESSAGE"`" $DIALOG_H $DIALOG_W	
 RESULT1=$?
 if [ $RESULT1 = "1" ]; then return; fi
 for I in ${ARRAY[@]}; do
@@ -901,8 +1139,11 @@ for I in ${ARRAY[@]}; do
 				sed -i '/*MOZ_DISABLE_PANGO.*/d' $BASHRC
 				echo "export MOZ_DISABLE_PANGO=1" >> $BASHRC
 				source $BASHRC
-				# FEHLER wenn bereits installiert
-				sudo aptitude install sqlite3
+				ls -al /usr/bin/sqlite3 &>/dev/null 2>&1
+				if ! command ; then
+				# wenn nicht, wird dies installiert
+					sudo aptitude install sqlite3
+				fi
 				pkill -9 firefox*
 				for f in ~/.mozilla/firefox/*/*sqlite; do sqlite3 $f 'VACUUM;'; done
 				dialog --backtitle "Firefox optimieren" \
@@ -1078,6 +1319,7 @@ for I in ${ARRAY[@]}; do
 			sudo aptitude install miredo
 			sudo /etc/init.d/miredo start
 			ping6 -c 4 ipv6.google.com
+# sudo aptitude purge miredo
 #echo "#disable ipv6" | sudo tee -a /etc/sysctl.conf
 #echo "net.ipv6.conf.all.disable_ipv6 = 1" | sudo tee -a /etc/sysctl.conf
 #echo "net.ipv6.conf.default.disable_ipv6 = 1" | sudo tee -a /etc/sysctl.conf
@@ -1125,7 +1367,11 @@ esac
 if [ $UBUNTU_VERSION = "FEHLER" ]; then
 	continue
 else
-	dialog --title " Ubuntu Version waehlen " --yesno "Moechtest du wirklich alle sources.list Eintraege auf '$UBUNTU_VERSION' aendern?" 6 44 
+	chooseDialog
+	TITLE="Ubuntu Version waehlen"
+	MESSAGE="Moechtest du wirklich alle sources.list Eintraege auf '$UBUNTU_VERSION' aendern?"
+	setDialogDimensions "${MESSAGE}"
+	dialog --title " $TITLE " --yesno "\n`echo -e "$MESSAGE"`" $DIALOG_H $DIALOG_W	
 	RESULT1=$?
 	if [ $RESULT1 = "1" ]; then return; fi
 	case $RESULT in
@@ -1251,50 +1497,15 @@ done
 # startupmanager
 
 
-#echo -e $YELLOW"Cleaning apt cache..."$ENDCOLOR
-#aptitude clean
-#echo -e $YELLOW"Removing old config files..."$ENDCOLOR
-#sudo aptitude purge $OLDCONF
-#echo -e $YELLOW"Removing old kernels..."$ENDCOLOR
-#sudo aptitude purge $OLDKERNELS
-#echo -e $YELLOW"Emptying every trashes..."$ENDCOLOR
-#rm -rf /home/*/.local/share/Trash/*/** &> /dev/null
-#rm -rf /root/.local/share/Trash/*/** &> /dev/null
-#
-#echo -e $YELLOW"Script Finished!"$ENDCOLOR
-#
-#
-#OLDCONF=$(dpkg -l|grep "^rc"|awk '{print $2}')
-#CURKERNEL=$(uname -r|sed 's/-*[a-z]//g'|sed 's/-386//g')
-#LINUXPKG="linux-(image|headers|ubuntu-modules|restricted-modules)"
-#METALINUXPKG="linux-(image|headers|restricted-modules)-(generic|i386|server|common|rt|xen)"
-#OLDKERNELS=$(dpkg -l|awk '{print $2}'|grep -E $LINUXPKG |grep -vE $METALINUXPKG|grep -v $CURKERNEL)
-#YELLOW="\033[1;33m"
-#RED="\033[0;31m"
-#ENDCOLOR="\033[0m"
-#
-#if [ $USER != root ]; then
-#  echo -e $RED"Error: must be root"
-#  echo -e $YELLOW"Exiting..."$ENDCOLOR
-#  exit 0
-#fi
-#
-#echo -e $YELLOW"Cleaning apt cache..."$ENDCOLOR
-#aptitude clean
-#
-#echo -e $YELLOW"Removing old config files..."$ENDCOLOR
-#
-#
-#cd /usr/share/gdm/themes/
-#sudo tar -xzf /home/johannes/Dropbox/Sicherung/UbuntuBlackGDM/ubuntu-black.tar.gz
-#sudo chown -R root:root /usr/share/gdm/themes/ubuntu-black
-#sudo chmod -R 755 /usr/share/gdm/themes/ubuntu-black
-#sudo sed -i 's/GraphicalTheme=Human/GraphicalTheme=ubuntu-black/g' /etc/gdm/gdm.conf-custom
-#sudo invoke-rc.d gdm reload
-#
-#dialog --colors --infobox "\Zb\Z1Hi \Z5there" 3 12
-#
-#			        
+aptitude clean
+sudo aptitude purge $OLDCONF
+sudo aptitude purge $OLDKERNELS
+rm -rf /home/*/.local/share/Trash/*/** &> /dev/null
+rm -rf /root/.local/share/Trash/*/** &> /dev/null
+
+
+
+		        
 
 # prelink preload
 #sudo apt-get -y purge empathy usb-creator-common gnome-disk-utility f-spot
@@ -1460,3 +1671,6 @@ done
 # Nautilus-Adressleiste - Navigationssknoepfen
 #gconftool-2 --type Boolean --set /apps/nautilus/preferences/always_use_location_entry False
 
+
+
+#tar czvf - /backup/db_bacula.dump.gz | ssh root@192.168.0.3 "tar xvzf - -C /"
